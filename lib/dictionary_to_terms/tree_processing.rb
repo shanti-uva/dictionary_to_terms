@@ -1,15 +1,9 @@
 module DictionaryToTerms
-  class Importation
+  class TreeProcessing
     attr_accessor :spreadsheet
     
     def initialize
       @tib_alpha = Perspective.get_by_code('tib.alpha')
-      @relation_type = FeatureRelationType.get_by_code('is.beginning.of')
-      @space = Unicode::U0F0B
-      @zero_width_space = Unicode::UFEFF
-      @nb_space = Unicode::U00A0
-      
-      
       @tibetan_script = WritingSystem.get_by_code('tibt')
       @tibetan_language = Language.get_by_code('bod')
       @latin_script = WritingSystem.get_by_code('latin')
@@ -17,10 +11,15 @@ module DictionaryToTerms
       @thl_phonetic = PhoneticSystem.get_by_code('thl.simple.transcrip')
     end
     
-    def run_importation
+    def run_tree_importation
       puts "#{Time.now}: Starting importation."
       task = ImportationTask.find_by(task_code: 'dictionary-to-terms-import')
       task = ImportationTask.create!(task_code: 'dictionary-to-terms-import') if task.nil?
+      relation_type = FeatureRelationType.get_by_code('is.beginning.of')
+      space = Unicode::U0F0B
+      zero_width_space = Unicode::UFEFF
+      nb_space = Unicode::U00A0
+      
       self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       i = 1
@@ -41,29 +40,29 @@ module DictionaryToTerms
             prefix = wylie.prefixed_letters('bod')
             next if prefix.blank?
             if prefixes[prefix].nil?
-              tibetan_syllable = definition.term.split(@space).first
+              tibetan_syllable = definition.term.split(space).first
               prefix_term = process_term(nil, j, tibetan_syllable, prefix)
               prefixes[prefix] = prefix_term
-              relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: @relation_type)
+              relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: relation_type)
               self.spreadsheet.imports.create!(item: relation)
               puts "#{Time.now}: Term #{prefix} processed as #{prefix_term.pid}."
               j += 1
               prefix_position[prefix] = 1
             end
-            syllable = wylie.gsub(@nb_space, ' ').split(' ').first.gsub(@zero_width_space, '').gsub('/', '')
+            syllable = wylie.gsub(nb_space, ' ').split(' ').first.gsub(zero_width_space, '').gsub('/', '')
             if syllables[syllable].nil?
-              tibetan_syllable = definition.term.split(@space).first
+              tibetan_syllable = definition.term.split(space).first
               syllable_term = process_term(nil, prefix_position[prefix], tibetan_syllable, syllable)
               prefix_position[prefix] += 1
               syllables[syllable] = syllable_term
-              relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: @relation_type)
+              relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: relation_type)
               self.spreadsheet.imports.create!(item: relation)
               puts "#{Time.now}: Syllable #{syllable} processed as #{syllable_term.pid}."
               syllable_position[syllable] = 1
             end
             word = process_term(definition.id, syllable_position[syllable], definition.term, definition.wylie, definition.phonetic)
             syllable_position[syllable] += 1
-            relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: @relation_type)
+            relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: relation_type)
             self.spreadsheet.imports.create!(item: relation)
             puts "#{Time.now}: Word #{definition.wylie} processed as #{word.pid}."
           end
@@ -115,6 +114,42 @@ module DictionaryToTerms
           puts "#{Time.now}: Triggers updated for #{f.pid}."
         end
         Spawnling.wait([sid])
+      end
+    end
+    
+    def run_tree_classification
+      roman = View.get_by_code('roman.popular')
+      letter_subject_id = 9311
+      name_subject_id = 9312
+      phrase_subject_id = 9314
+      expression_subject_id = 9315
+      Feature.current_roots(@tib_alpha, roman).each do |letter_term|
+        if letter_term.subject_term_associations.empty?
+          a = letter_term.subject_term_associations.create(subject_id: letter_subject_id)
+          puts "#{Time.now}: #{letter_term.prioritized_name(roman).name} #{letter_term.pid} marked as letter." if !a.nil?
+        end
+        letter_term.current_children(@tib_alpha, roman).each do |name_term|
+          if name_term.subject_term_associations.empty?
+            a = name_term.subject_term_associations.create(subject_id: name_subject_id)
+            puts "#{Time.now}: #{name_term.prioritized_name(roman).name} #{name_term.pid} marked as name." if !a.nil?
+          end
+          sid = Spawnling.new do
+            puts "Spawning sub-process #{Process.pid}."
+            name_term.current_children(@tib_alpha, roman).each do |phrase_term|
+              if phrase_term.subject_term_associations.empty?
+                a = phrase_term.subject_term_associations.create(subject_id: phrase_subject_id)
+                puts "#{Time.now}: #{phrase_term.prioritized_name(roman).name} #{phrase_term.pid} marked as phrase." if !a.nil?
+              end
+              phrase_term.current_children(@tib_alpha, roman).each do |expression_term|
+                if expression_term.subject_term_associations.empty?
+                  a = expression_term.subject_term_associations.create(subject_id: expression_subject_id)
+                  puts "#{Time.now}: #{expression_term.prioritized_name(roman).name} #{expression_term.pid} marked as expression." if !a.nil?
+                end
+              end            
+            end
+          end
+          Spawnling.wait([sid])
+        end
       end
     end
   end
