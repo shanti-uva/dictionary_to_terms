@@ -6,21 +6,34 @@ namespace :dictionary_to_terms do
     task :prepare do
       Rake::Task['db:drop'].invoke
       Rake::Task['db:create'].invoke
-      Rake::Task['kmaps_engine:db:schema:load'].invoke
+      Rake::Task['terms_engine:db:schema:load'].invoke
       Rake::Task['kmaps_engine:db:seed'].invoke
       Rake::Task['terms_engine:db:seed'].invoke
       Feature.remove_by!("tree:#{Feature.uid_prefix}")
     end
-    namespace :tree do
-      desc "Run importation"
-      task import: :environment do
+    
+    namespace :import do
+      desc "Run tree importation"
+      task tree: :environment do
         DictionaryToTerms::TreeProcessing.new.run_tree_importation
         Rake::Task['kmaps_engine:flare:reindex_all'].invoke
       end
-      
+      desc "Run definition importation"
+      task definition: :environment do
+        from = ENV['FROM']
+        DictionaryToTerms::TreeProcessing.new.run_definition_import(from)
+      end
+    end
+    
+    namespace :tree do
       desc "Run node classification"
       task classify: :environment do
         DictionaryToTerms::TreeProcessing.new.run_tree_classification
+      end
+      
+      desc "Check old definitions"
+      task old_definitions_check: :environment do
+        DictionaryToTerms::TreeProcessing.new.check_old_definitions
       end
     end
   end
