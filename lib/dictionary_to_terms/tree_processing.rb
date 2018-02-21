@@ -131,16 +131,17 @@ module DictionaryToTerms
       definitions.each do |definition|
         term_str = definition.term
         next if term_str.blank?
-        word_str = tibetan_cleanup(term_str)
-        word = search_by_phoneme(word_str, @expression_subject_id)
-        if word.nil?
-          word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
+        sid = Spawnling.new do
+          puts "Spawning sub-process #{Process.pid}."
+          word_str = tibetan_cleanup(term_str)
+          word = search_by_phoneme(word_str, @expression_subject_id)
           if word.nil?
-            puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added."
-            next
+            word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
+            puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
           end
+          process_definition(word, definition) if !word.nil?
         end
-        process_definition(word, definition)
+        Spawnling.wait([sid])
       end
     end
     
