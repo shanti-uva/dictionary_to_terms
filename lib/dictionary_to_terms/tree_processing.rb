@@ -132,7 +132,7 @@ module DictionaryToTerms
         term_str = definition.term
         next if term_str.blank?
         sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid}."
+          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
           word_str = tibetan_cleanup(term_str)
           word = search_by_phoneme(word_str, @expression_subject_id)
           if word.nil?
