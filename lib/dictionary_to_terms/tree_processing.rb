@@ -163,13 +163,29 @@ module DictionaryToTerms
         dest_def = nil
       else
         source_language = source_def.language
-        dest_language = source_language.blank? ? @default_language : Language.get_by_name(source_language)
-        attrs = { language: dest_language, content: source_content, author: dest_person, numerology: source_def.numerology, tense: source_def.tense }
+        if source_language.blank?
+          lang_code = source_content.first.ord.language_code
+          dest_language = lang_code.blank? ? nil : Language.where(['code like ?', "#{lang_code}%"]).first
+          dest_language ||= @default_language
+        else
+          dest_language = Language.get_by_name(source_language)
+        end
+        attrs = { content: source_content }
         dest_def = word.definitions.where(attrs).first
         if dest_def.nil?
-          dest_def = word.definitions.create!(attrs.merge(is_public: true, position: position))
+          dest_def = word.definitions.create!(attrs.merge(is_public: true, position: position, language: dest_language, author: dest_person, numerology: source_def.numerology, tense: source_def.tense))
           self.spreadsheet.imports.create!(item: dest_def)
           puts "#{Time.now}: Adding #{source_def.id} as #{parent_def.nil? ? 'root' : 'child'} definition for #{word.fid}."
+          
+          # only want to establish relationship if definition is new
+          if !parent_def.nil?
+            attrs = { parent_node: parent_def, child_node: dest_def }
+            relation = DefinitionRelation.where(attrs).first
+            if relation.nil?
+              relation = DefinitionRelation.create!(attrs)
+              self.spreadsheet.imports.create!(item: relation)
+            end
+          end
         end
         source_note = source_def.analytical_note
         if !source_note.blank?
@@ -180,14 +196,6 @@ module DictionaryToTerms
             self.spreadsheet.imports.create!(item: dest_note)
           end
           dest_note.authors << dest_person if !dest_person.nil? && dest_note.authors.where(id: dest_person).first.nil?
-        end
-        if !parent_def.nil?
-          attrs = { parent_node: parent_def, child_node: dest_def }
-          relation = DefinitionRelation.where(attrs).first
-          if relation.nil?
-            relation = DefinitionRelation.create!(attrs)
-            self.spreadsheet.imports.create!(item: relation)
-          end
         end
       end
       children = source_def.super_definitions.collect{|s| s.sub_definition}.reject(&:nil?)
