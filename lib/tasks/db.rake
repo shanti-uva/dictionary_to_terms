@@ -19,9 +19,14 @@ namespace :dictionary_to_terms do
         Rake::Task['kmaps_engine:flare:reindex_all'].invoke
       end
       desc "Run definition importation"
-      task definition: :environment do
+      task definitions: :environment do
         from = ENV['FROM']
         DictionaryToTerms::TreeProcessing.new.run_definition_import(from)
+      end
+      desc "Run old definition importation"
+      task old_definitions: :environment do
+        from = ENV['FROM']
+        DictionaryToTerms::TreeProcessing.new.run_old_definition_import(from)
       end
     end
     

@@ -122,8 +122,9 @@ module DictionaryToTerms
     end
     
     def run_definition_import(from = nil)
-      task = ImportationTask.find_by(task_code: 'dtt-definition-import')
-      task = ImportationTask.create!(task_code: 'dtt-definition-import') if task.nil?
+      attrs = { task_code: 'dtt-definition-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
       self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       definitions = Dictionary::Definition.where(level: 'head term').order(:id)
@@ -140,6 +141,31 @@ module DictionaryToTerms
             puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
           end
           process_definition(word, definition) if !word.nil?
+        end
+        Spawnling.wait([sid])
+      end
+    end
+
+    def run_old_definition_import(from = nil)
+      attrs = { task_code: 'dtt-old-definition-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
+      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
+      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
+      definitions = Dictionary::OldDefinition.all.order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        sid = Spawnling.new do
+          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
+          word_str = tibetan_cleanup(term_str)
+          word = search_by_phoneme(word_str, @expression_subject_id)
+          if word.nil?
+            word = add_term(definition.id, word_str)
+            puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
+          end
+          process_old_definition(word, definition) if !word.nil?
         end
         Spawnling.wait([sid])
       end
@@ -164,7 +190,7 @@ module DictionaryToTerms
       else
         source_language = source_def.language
         if source_language.blank?
-          lang_code = source_content.first.ord.language_code
+          lang_code = source_content.language_code
           dest_language = lang_code.blank? ? nil : Language.where(['code like ?', "#{lang_code}%"]).first
           dest_language ||= @default_language
         else
@@ -206,6 +232,55 @@ module DictionaryToTerms
       end
     end
     
+    def process_old_definition(word, source_def)
+      source_content = source_def.definition
+      source_login = source_def.created_by
+      source_person = source_login.blank? ? nil : Dictionary::User.find_by(login: source_login)
+      if source_person.nil?
+        dest_person = nil
+      else
+        attrs = { fullname: source_person.full_name }
+        dest_person = AuthenticatedSystem::Person.find_by(attrs)
+        if dest_person.nil?
+          dest_person = AuthenticatedSystem::Person.create!(attrs)
+          self.spreadsheet.imports.create!(item: dest_person)
+        end
+      end
+      source_dictionary = source_def.dictionary
+      if source_dictionary.blank?
+        info_source = nil
+      else
+        attrs = { title: source_dictionary }
+        info_source = InfoSource.find_by(attrs)
+        info_source = InfoSource.create!(attrs.merge(code: source_dictionary)) if info_source.nil?
+      end
+      if source_content.blank?
+        dest_def = nil
+      else
+        lang_code = source_content.language_code
+        dest_language = lang_code.blank? ? nil : Language.where(['code like ?', "#{lang_code}%"]).first
+        dest_language ||= @default_language
+        attrs = { content: source_content }
+        definitions = word.definitions
+        dest_def = definitions.where(attrs).first
+        if dest_def.nil?
+          position = definitions.maximum(:position)
+          position = position.nil? ? 1 : position + 1
+          dest_def = word.definitions.create!(attrs.merge(is_public: true, position: position, language: dest_language, author: dest_person))
+          self.spreadsheet.imports.create!(item: dest_def)
+          if !info_source.nil?
+            citations = dest_def.citations
+            citation = citations.find_by(info_source: info_source)
+            if citation.nil?
+              citation = citations.create!(info_source: info_source)
+              self.spreadsheet.imports.create!(item: citation)
+            end
+          end
+          puts "#{Time.now}: Adding #{source_def.id} as root definition for #{word.fid}."
+        end
+      end
+    end
+    
     def add_term(old_pid, tibetan = nil, wylie = nil, phonetic = nil)
       word = search_by_phoneme(tibetan, @expression_subject_id)
       return word if !word.nil?
@@ -244,7 +319,7 @@ module DictionaryToTerms
         return word
       end
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
-      return nil if letter_str.blank? # Grammatical name not found and root letter cannot be identified."
+      return nil if letter_str.blank? # Grammatical name not found and root letter cannot be identified.
       letter = search_by_phoneme(letter_str, @letter_subject_id)
       return nil if letter.nil? # Not confortable adding a new letter!
       name = process_term(old_pid, nil, @name_subject_id, name_str)
