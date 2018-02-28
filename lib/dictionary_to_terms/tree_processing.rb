@@ -290,6 +290,8 @@ module DictionaryToTerms
         word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
+        syllable.index!
+        word.index!
         return word
       end
       pos = syllable_str.chars.find_index{|l| l.ord.is_tibetan_vowel?}
@@ -316,6 +318,9 @@ module DictionaryToTerms
         word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
+        name.index!
+        syllable.index!
+        word.index!
         return word
       end
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
@@ -331,6 +336,10 @@ module DictionaryToTerms
       word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
       relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
+      letter.index!
+      name.index!
+      syllable.index!
+      word.index!
       return word
     end
 
