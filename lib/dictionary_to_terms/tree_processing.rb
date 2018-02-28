@@ -146,7 +146,7 @@ module DictionaryToTerms
       end
     end
 
-    def run_old_definition_import(from = nil)
+    def run_old_definition_import(from = nil, to = nil)
       attrs = { task_code: 'dtt-old-definition-import' }
       task = ImportationTask.find_by(attrs)
       task = ImportationTask.create!(attrs) if task.nil?
@@ -154,6 +154,7 @@ module DictionaryToTerms
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       definitions = Dictionary::OldDefinition.all.order(:id)
       definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
       definitions.each do |definition|
         term_str = definition.term
         next if term_str.blank?
@@ -269,6 +270,12 @@ module DictionaryToTerms
           dest_def = word.definitions.create!(attrs.merge(is_public: true, position: position, language: dest_language, author: dest_person))
           self.spreadsheet.imports.create!(item: dest_def)
           if !info_source.nil?
+            citation = dest_def.citations.create!(info_source: info_source)
+            self.spreadsheet.imports.create!(item: citation)
+          end
+          puts "#{Time.now}: Adding #{source_def.id} as root definition for #{word.fid}."
+        else
+          if !info_source.nil?
             citations = dest_def.citations
             citation = citations.find_by(info_source: info_source)
             if citation.nil?
@@ -276,7 +283,7 @@ module DictionaryToTerms
               self.spreadsheet.imports.create!(item: citation)
             end
           end
-          puts "#{Time.now}: Adding #{source_def.id} as root definition for #{word.fid}."
+          puts "#{Time.now}: Definition #{source_def.id} already there in #{word.fid}."
         end
       end
     end

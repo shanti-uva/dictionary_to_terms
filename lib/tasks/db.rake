@@ -26,7 +26,13 @@ namespace :dictionary_to_terms do
       desc "Run old definition importation"
       task old_definitions: :environment do
         from = ENV['FROM']
-        DictionaryToTerms::TreeProcessing.new.run_old_definition_import(from)
+        to = ENV['TO']
+        fid = ENV['FID']
+        if fid.blank?
+          DictionaryToTerms::TreeProcessing.new.run_old_definition_import(from, to)
+        else
+          DictionaryToTerms::TreeProcessing.new.run_old_definition_import(fid, fid)
+        end
       end
     end
     
