@@ -9,18 +9,11 @@ module DictionaryToTerms
       @latin_script = WritingSystem.get_by_code('latin')
       @wylie_system = OrthographicSystem.get_by_code('thl.ext.wyl.translit')
       @thl_phonetic = PhoneticSystem.get_by_code('thl.simple.transcrip')
-      
-      @letter_subject_id = 9311
-      @name_subject_id = 9312
-      @phrase_subject_id = 9314
-      @expression_subject_id = 9315
-      
-      @shad = Unicode::U0F0D
+
       @intersyllabic_tsheg = Unicode::U0F0B
       
       @zero_width_space = Unicode::UFEFF
       @nb_space = Unicode::U00A0
-      @space = ' '
       
       @default_language = Language.get_by_code('eng')
       @relation_type = FeatureRelationType.get_by_code('is.beginning.of')
@@ -34,7 +27,7 @@ module DictionaryToTerms
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       i = 1
       ComplexScripts::TibetanLetter.all.each do |letter|
-        root = process_term(nil, i, @letter_subject_id, letter.unicode, "#{letter.wylie}a")
+        root = process_term(nil, i, Feature::LETTER_SUBJECT_ID, letter.unicode, "#{letter.wylie}a")
         puts "#{Time.now}: Letter #{letter.wylie}a processed as #{root.pid}."
         i+=1
         sid = Spawnling.new do
@@ -49,10 +42,10 @@ module DictionaryToTerms
             next if wylie.blank?
             prefix = wylie.prefixed_letters('bod')
             next if prefix.blank?
-            term = tibetan_cleanup(definition.term)
+            term = definition.term.tibetan_cleanup
             if prefixes[prefix].nil?
               tibetan_syllable = term.split(@intersyllabic_tsheg).first
-              prefix_term = process_term(nil, j, @name_subject_id, tibetan_syllable, prefix)
+              prefix_term = process_term(nil, j, Feature::NAME_SUBJECT_ID, tibetan_syllable, prefix)
               prefixes[prefix] = prefix_term
               relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: @relation_type)
               self.spreadsheet.imports.create!(item: relation)
@@ -63,7 +56,7 @@ module DictionaryToTerms
             syllable = wylie.gsub(@nb_space, ' ').split(' ').first.gsub(@zero_width_space, '').gsub('/', '')
             if syllables[syllable].nil?
               tibetan_syllable = term.split(@intersyllabic_tsheg).first
-              syllable_term = process_term(nil, prefix_position[prefix], @phrase_subject_id, tibetan_syllable, syllable)
+              syllable_term = process_term(nil, prefix_position[prefix], Feature::PHRASE_SUBJECT_ID, tibetan_syllable, syllable)
               prefix_position[prefix] += 1
               syllables[syllable] = syllable_term
               relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: @relation_type)
@@ -71,9 +64,9 @@ module DictionaryToTerms
               puts "#{Time.now}: Syllable #{syllable} processed as #{syllable_term.pid}."
               syllable_position[syllable] = 1
             end
-            word = search_by_phoneme(term, @expression_subject_id)
+            word = Feature.search_expression(term)
             if word.nil?
-              word = process_term(definition.id, syllable_position[syllable], @expression_subject_id, term, definition.wylie, definition.phonetic)
+              word = process_term(definition.id, syllable_position[syllable], Feature::EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
               syllable_position[syllable] += 1
               relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: @relation_type)
               self.spreadsheet.imports.create!(item: relation)
@@ -115,13 +108,13 @@ module DictionaryToTerms
         end
       end
       if f.subject_term_associations.empty?
-        a = f.subject_term_associations.create(subject_id: level_subject_id)
+        a = f.subject_term_associations.create(subject_id: level_subject_id, branch_id: Feature::PHONEME_SUBJECT_ID)
         self.spreadsheet.imports.create!(item: a)
       end
       return f
     end
     
-    def run_definition_import(from = nil)
+    def run_definition_import(from = nil, to = nil)
       attrs = { task_code: 'dtt-definition-import' }
       task = ImportationTask.find_by(attrs)
       task = ImportationTask.create!(attrs) if task.nil?
@@ -129,16 +122,17 @@ module DictionaryToTerms
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       definitions = Dictionary::Definition.where(level: 'head term').order(:id)
       definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
       definitions.each do |definition|
         term_str = definition.term
         next if term_str.blank?
         sid = Spawnling.new do
           puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-          word_str = tibetan_cleanup(term_str)
-          word = search_by_phoneme(word_str, @expression_subject_id)
+          word_str = term_str.tibetan_cleanup
+          word = Feature.search_expression(word_str)
           if word.nil?
             word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
-            puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
+            STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
           end
           process_definition(word, definition) if !word.nil?
         end
@@ -160,13 +154,75 @@ module DictionaryToTerms
         next if term_str.blank?
         sid = Spawnling.new do
           puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-          word_str = tibetan_cleanup(term_str)
-          word = search_by_phoneme(word_str, @expression_subject_id)
+          word_str = term_str.tibetan_cleanup
+          word = Feature.search_expression(word_str)
           if word.nil?
             word = add_term(definition.id, word_str)
-            puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
+            STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
           end
           process_old_definition(word, definition) if !word.nil?
+        end
+        Spawnling.wait([sid])
+      end
+    end
+    
+    def add_subject(collection, subject_id, branch_id)
+      if !subject_id.nil?
+        options = { subject_id: subject_id }
+        association = collection.where(options).first
+        if association.nil?
+          association = collection.create(options.merge(branch_id: branch_id))
+          self.spreadsheet.imports.create!(item: association)
+        end
+      end
+    end
+    
+    def process_subjects(source_def, subject_associations, dest_defs)
+      add_subject(subject_associations, source_def.grammatical_function_type_id, 5812) # or specifically tibetan: 286?
+      add_subject(subject_associations, source_def.language_context_type_id, 185)
+      add_subject(subject_associations, source_def.language_type_id, 184)
+      add_subject(subject_associations, source_def.literary_form_type_id, 186)
+      add_subject(subject_associations, source_def.literary_genre_type_id, 119)
+      add_subject(subject_associations, source_def.literary_period_type_id, 187)
+      add_subject(subject_associations, source_def.major_dialect_family_type_id, 301)
+      add_subject(subject_associations, source_def.register_type_id, 190)
+      add_subject(subject_associations, source_def.thematic_classification_type_id, 272)
+      children = source_def.super_definitions.collect{|s| s.sub_definition}.reject(&:nil?)
+      children.each do |child|
+        source_content = child.definition
+        next if source_content.blank?
+        dest_def = dest_defs.where(content: source_content).first
+        if dest_def.nil?
+          STDERR.puts "#{Time.now}: Definition #{child.id} not found!"
+          next
+        end
+        puts "#{Time.now}: Processing subject associations for sub-definition #{child.id}."
+        process_subjects(child, dest_def.definition_subject_associations, dest_def.children)
+      end
+    end
+    
+    def run_subjects_import(from = nil, to = nil)
+      attrs = { task_code: 'dtt-definition-subjects-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
+      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
+      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
+      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        word_str = term_str.tibetan_cleanup
+        word = Feature.search_expression(word_str)
+        if word.nil?
+          STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found in already imported terms." if word.nil?
+          next
+        end
+        sid = Spawnling.new do
+          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
+          puts "#{Time.now}: Processing subject associations for TID #{word.fid} (#{definition.id})."
+          process_subjects(definition, word.subject_term_associations, word.definitions)
         end
         Spawnling.wait([sid])
       end
@@ -288,13 +344,57 @@ module DictionaryToTerms
       end
     end
     
-    def add_term(old_pid, tibetan = nil, wylie = nil, phonetic = nil)
-      word = search_by_phoneme(tibetan, @expression_subject_id)
+    def addable(tibetan)
+      word = Feature.search_expression(tibetan)
       return word if !word.nil?
       syllable_str = tibetan.split(@intersyllabic_tsheg).first
-      syllable = search_by_phoneme(syllable_str, @phrase_subject_id)
+      syllable = Feature.search_by_phoneme(syllable_str, Feature::PHRASE_SUBJECT_ID)
+      return true if !syllable.nil?
+      pos = syllable_str.chars.find_index{|l| l.ord.is_tibetan_vowel?}
+      letter_str = nil
+      name_str = nil
+      if pos.nil?
+        if syllable_str.size == 1
+          letter_str = syllable_str
+          name_str = syllable_str
+        # assuming if three letter word with no vowels and stacks, root is middle letter, not taking into account exceptions and secondary suffix for now.
+        elsif syllable_str.size == 3 && syllable_str.chars.find_index{|l| !l.ord.is_tibetan_single_letter?}.nil? && syllable_str[0].ord.is_prefix? && syllable_str[2].ord.is_suffix?
+          letter_str = syllable_str[1]
+          name_str = syllable_str[0...2] + Unicode::U0F60
+        else
+          name_str = syllable_str if !syllable_str.last.ord.is_suffix?
+        end
+      else
+        pos +=1 if p==0
+        name_str = syllable_str[0...pos]
+      end
+      if name_str.blank? # Grammatical name cannot be easily identified.
+        STDERR.puts "#{Time.now}: Grammatical name cannot be easily identified."
+        return false
+      end
+      name = Feature.search_by_phoneme(name_str, Feature::NAME_SUBJECT_ID)
+      return true if !name.nil?
+
+      letter_str = name_str.tibetan_base_letter if letter_str.nil?
+      if letter_str.blank? # Grammatical name not found and root letter cannot be identified.
+        STDERR.puts "#{Time.now}: Grammatical name not found and root letter cannot be identified."
+        return false
+      end
+      letter = Feature.search_by_phoneme(letter_str, Feature::LETTER_SUBJECT_ID)
+      if letter.nil? # Not confortable adding a new letter!
+        STDERR.puts "#{Time.now}: Not confortable adding a new letter."
+        return false
+      end
+      return true
+    end
+    
+    def add_term(old_pid, tibetan = nil, wylie = nil, phonetic = nil)
+      word = Feature.search_expression(tibetan)
+      return word if !word.nil?
+      syllable_str = tibetan.split(@intersyllabic_tsheg).first
+      syllable = Feature.search_by_phoneme(syllable_str, Feature::PHRASE_SUBJECT_ID)
       if !syllable.nil?
-        word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
+        word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
         syllable.index!
@@ -305,8 +405,11 @@ module DictionaryToTerms
       letter_str = nil
       name_str = nil
       if pos.nil?
-        # assuming if three letter word with no vowels and stacks, root is middle letter, not taking into account exceptions and secondary suffix for now.
-        if syllable_str.size == 3 && syllable_str.chars.find_index{|l| !l.ord.is_tibetan_single_letter?}.nil? && syllable_str[0].ord.is_prefix? && syllable_str[2].ord.is_suffix?
+        if syllable_str.size == 1
+          letter_str = syllable_str
+          name_str = syllable_str
+          # assuming if three letter word with no vowels and stacks, root is middle letter, not taking into account exceptions and secondary suffix for now.
+        elsif syllable_str.size == 3 && syllable_str.chars.find_index{|l| !l.ord.is_tibetan_single_letter?}.nil? && syllable_str[0].ord.is_prefix? && syllable_str[2].ord.is_suffix?
           letter_str = syllable_str[1]
           name_str = syllable_str[0...2] + Unicode::U0F60
         else
@@ -317,12 +420,12 @@ module DictionaryToTerms
         name_str = syllable_str[0...pos]
       end
       return nil if name_str.blank? # Grammatical name cannot be easily identified."
-      name = search_by_phoneme(name_str, @name_subject_id)
+      name = Feature.search_by_phoneme(name_str, Feature::NAME_SUBJECT_ID)
       if !name.nil?
-        syllable = process_term(old_pid, nil, @phrase_subject_id, syllable_str)
+        syllable = process_term(old_pid, nil, Feature::PHRASE_SUBJECT_ID, syllable_str)
         relation = FeatureRelation.create!(child_node: syllable, parent_node: name, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
-        word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
+        word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
         name.index!
@@ -332,15 +435,15 @@ module DictionaryToTerms
       end
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
       return nil if letter_str.blank? # Grammatical name not found and root letter cannot be identified.
-      letter = search_by_phoneme(letter_str, @letter_subject_id)
+      letter = Feature.search_by_phoneme(letter_str, Feature::LETTER_SUBJECT_ID)
       return nil if letter.nil? # Not confortable adding a new letter!
-      name = process_term(old_pid, nil, @name_subject_id, name_str)
+      name = process_term(old_pid, nil, Feature::NAME_SUBJECT_ID, name_str)
       relation = FeatureRelation.create!(child_node: name, parent_node: letter, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
-      syllable = process_term(old_pid, nil, @phrase_subject_id, syllable_str)
+      syllable = process_term(old_pid, nil, Feature::PHRASE_SUBJECT_ID, syllable_str)
       relation = FeatureRelation.create!(child_node: syllable, parent_node: name, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
-      word = process_term(old_pid, nil, @expression_subject_id, tibetan, wylie, phonetic)
+      word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
       relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
       letter.index!
@@ -348,29 +451,6 @@ module DictionaryToTerms
       syllable.index!
       word.index!
       return word
-    end
-
-    def search_by_phoneme(name, phoneme_id)
-      names = FeatureName.where(name: name).includes(feature: :subject_term_associations)
-      name_position = names.find_index{ |n| n.feature.subject_term_associations.collect(&:subject_id).include? phoneme_id }
-      name_position.nil? ? nil : names[name_position].feature
-    end
-    
-    def search_expression(name)
-      search_by_phoneme(name, @expression_subject_id)
-    end
-    
-    def tibetan_cleanup(tibetan)
-      term = tibetan.strip
-      term.gsub!(@space, @nb_space)
-      term.gsub!(@shad, '')
-      term.slice!(0) if term.first == @zero_width_space
-      last = term.last
-      while last.ord.is_tibetan_punctuation? || last==@space || last==@nb_space
-        term.chop!
-        last = term.last
-      end
-      term
     end
     
     def process_triggers
@@ -391,24 +471,24 @@ module DictionaryToTerms
       roman = View.get_by_code('roman.popular')
       Feature.current_roots(@tib_alpha, roman).each do |letter_term|
         if letter_term.subject_term_associations.empty?
-          a = letter_term.subject_term_associations.create!(subject_id: @letter_subject_id)
+          a = letter_term.subject_term_associations.create!(subject_id: Feature::LETTER_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
           puts "#{Time.now}: #{letter_term.prioritized_name(roman).name} #{letter_term.pid} marked as letter." if !a.nil?
         end
         letter_term.current_children(@tib_alpha, roman).each do |name_term|
           if name_term.subject_term_associations.empty?
-            a = name_term.subject_term_associations.create!(subject_id: @name_subject_id)
+            a = name_term.subject_term_associations.create!(subject_id: Feature::NAME_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
             puts "#{Time.now}: #{name_term.prioritized_name(roman).name} #{name_term.pid} marked as name." if !a.nil?
           end
           sid = Spawnling.new do
             puts "Spawning sub-process #{Process.pid}."
             name_term.current_children(@tib_alpha, roman).each do |phrase_term|
               if phrase_term.subject_term_associations.empty?
-                a = phrase_term.subject_term_associations.create!(subject_id: @phrase_subject_id)
+                a = phrase_term.subject_term_associations.create!(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
                 puts "#{Time.now}: #{phrase_term.prioritized_name(roman).name} #{phrase_term.pid} marked as phrase." if !a.nil?
               end
               phrase_term.current_children(@tib_alpha, roman).each do |expression_term|
                 if expression_term.subject_term_associations.empty?
-                  a = expression_term.subject_term_associations.create!(subject_id: @expression_subject_id)
+                  a = expression_term.subject_term_associations.create!(subject_id: Feature::EXPRESSION_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
                   puts "#{Time.now}: #{expression_term.prioritized_name(roman).name} #{expression_term.pid} marked as expression." if !a.nil?
                 end
               end            
@@ -419,42 +499,37 @@ module DictionaryToTerms
       end
     end
     
-    def check_old_definitions
-      Dictionary::OldDefinition.all.order(:id).each do |d|
-        term = tibetan_cleanup(d.term)
-        word = search_by_phoneme(term, @expression_subject_id)
-        if word.nil?
-          syllable_str = term.split(@intersyllabic_tsheg).first
-          syllable = search_by_phoneme(term, @phrase_subject_id)
-          if syllable.nil?
-            pos = syllable_str.chars.find_index{|l| l.ord.is_tibetan_vowel?}
-            letter_str = nil
-            name_str = nil
-            if pos.nil?
-              # assuming if three letter word with no vowels and stacks, root is middle letter, not taking into account exceptions and secondary suffix for now.
-              if syllable_str.size == 3 && syllable_str.chars.find_index{|l| !l.ord.is_tibetan_single_letter?}.nil? && syllable_str[0].ord.is_prefix? && syllable_str[2].ord.is_suffix?
-                letter_str = syllable_str[1]
-                name_str = syllable_str[0...2] + Unicode::U0F60
-              else
-                name_str = syllable_str if !syllable_str.last.ord.is_suffix?
-              end
-            else
-              pos +=1 if p==0
-              name_str = syllable_str[0...pos]
-            end
-            if name_str.blank?
-              puts "#{Time.now}: Grammatical name for term #{term} (#{d.id}) cannot be easily identified."
-            else
-              name = search_by_phoneme(name_str, @name_subject_id)
-              if name.nil?
-                letter_str = name_str.tibetan_base_letter if letter_str.nil?
-                if letter_str.nil?
-                  puts "#{Time.now}: Grammatical name #{name_str} for term #{term} (#{d.id}) not found and root letter cannot be identified."
-                else
-                  puts "#{Time.now}: Grammatical name #{name_str} for term #{term} (#{d.id}) not found, but will be added under root letter #{letter_str}."
-                end
-              end
-            end
+    def check_old_definitions(from = nil, to = nil)
+      definitions = Dictionary::OldDefinition.all.order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |d|
+        term = d.term.tibetan_cleanup
+        response = addable(term)
+        if !response.instance_of? Feature
+          if response
+            puts "#{term} (#{d.id}) not found but can be added."
+          else
+            puts "#{term} (#{d.id}) cannot be added."
+          end
+        end
+      end
+    end
+    
+    def check_head_terms(from = nil, to = nil)
+      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        word_str = term_str.tibetan_cleanup
+        response = addable(word_str)
+        if !response.instance_of? Feature
+          if response
+            puts "#{word_str} (#{definition.id}) not found but can be added."
+          else
+            puts "#{word_str} (#{definition.id}) cannot be added."
           end
         end
       end

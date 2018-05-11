@@ -21,17 +21,34 @@ namespace :dictionary_to_terms do
       desc "Run definition importation"
       task definitions: :environment do
         from = ENV['FROM']
-        DictionaryToTerms::TreeProcessing.new.run_definition_import(from)
+        to = ENV['TO']
+        fid = ENV['ID']
+        if fid.blank?
+          DictionaryToTerms::TreeProcessing.new.run_definition_import(from, to)
+        else
+          DictionaryToTerms::TreeProcessing.new.run_definition_import(fid, fid)
+        end
       end
       desc "Run old definition importation"
       task old_definitions: :environment do
         from = ENV['FROM']
         to = ENV['TO']
-        fid = ENV['FID']
+        fid = ENV['ID']
         if fid.blank?
           DictionaryToTerms::TreeProcessing.new.run_old_definition_import(from, to)
         else
           DictionaryToTerms::TreeProcessing.new.run_old_definition_import(fid, fid)
+        end
+      end
+      desc "Run definition subject importation"
+      task subjects: :environment do
+        from = ENV['FROM']
+        to = ENV['TO']
+        fid = ENV['FID']
+        if fid.blank?
+          DictionaryToTerms::TreeProcessing.new.run_subjects_import(from, to)
+        else
+          DictionaryToTerms::TreeProcessing.new.run_subjects_import(fid, fid)
         end
       end
     end
@@ -44,7 +61,26 @@ namespace :dictionary_to_terms do
       
       desc "Check old definitions"
       task old_definitions_check: :environment do
-        DictionaryToTerms::TreeProcessing.new.check_old_definitions
+        from = ENV['FROM']
+        to = ENV['TO']
+        fid = ENV['FID']
+        if fid.blank?
+          DictionaryToTerms::TreeProcessing.new.check_old_definitions(from, to)
+        else
+          DictionaryToTerms::TreeProcessing.new.check_old_definitions(fid, fid)
+        end
+      end
+      
+      desc "Check head terms"
+      task head_terms_check: :environment do
+        from = ENV['FROM']
+        to = ENV['TO']
+        fid = ENV['FID']
+        if fid.blank?
+          DictionaryToTerms::TreeProcessing.new.check_head_terms(from, to)
+        else
+          DictionaryToTerms::TreeProcessing.new.check_head_terms(fid, fid)
+        end
       end
     end
   end
