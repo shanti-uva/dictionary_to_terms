@@ -187,6 +187,7 @@ module DictionaryToTerms
       add_subject(subject_associations, source_def.major_dialect_family_type_id, 301)
       add_subject(subject_associations, source_def.register_type_id, 190)
       add_subject(subject_associations, source_def.thematic_classification_type_id, 272)
+      source_def.definition_category_associations.each { |a| add_subject(subject_associations, a.category_id, a.category_branch_id) }
       children = source_def.super_definitions.collect{|s| s.sub_definition}.reject(&:nil?)
       children.each do |child|
         source_content = child.definition
