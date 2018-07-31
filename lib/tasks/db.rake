@@ -82,6 +82,11 @@ namespace :dictionary_to_terms do
           DictionaryToTerms::TreeProcessing.new.check_head_terms(fid, fid)
         end
       end
+      
+      desc "Run tree flattening"
+      task flatten: :environment do
+        DictionaryToTerms::TreeProcessing.new.run_tree_flattening
+      end
     end
   end
 end
