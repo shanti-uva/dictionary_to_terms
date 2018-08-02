@@ -31,47 +31,51 @@ module DictionaryToTerms
         puts "#{Time.now}: Letter #{letter.wylie}a processed as #{root.pid}."
         i+=1
         sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid}."
-          j = 1
-          syllables = {}
-          prefixes = {}
-          prefix_position = {}
-          syllable_position = {}
-          Dictionary::Definition.where(root_letter_id: letter.id, level: 'head term').order(:sort_order).each do |definition|
-            wylie = definition.wylie
-            next if wylie.blank?
-            prefix = wylie.prefixed_letters('bod')
-            next if prefix.blank?
-            term = definition.term.tibetan_cleanup
-            if prefixes[prefix].nil?
-              tibetan_syllable = term.split(@intersyllabic_tsheg).first
-              prefix_term = process_term(nil, j, Feature::NAME_SUBJECT_ID, tibetan_syllable, prefix)
-              prefixes[prefix] = prefix_term
-              relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: @relation_type)
-              self.spreadsheet.imports.create!(item: relation)
-              puts "#{Time.now}: Term #{prefix} processed as #{prefix_term.pid}."
-              j += 1
-              prefix_position[prefix] = 1
+          begin
+            puts "Spawning sub-process #{Process.pid}."
+            j = 1
+            syllables = {}
+            prefixes = {}
+            prefix_position = {}
+            syllable_position = {}
+            Dictionary::Definition.where(root_letter_id: letter.id, level: 'head term').order(:sort_order).each do |definition|
+              wylie = definition.wylie
+              next if wylie.blank?
+              prefix = wylie.prefixed_letters('bod')
+              next if prefix.blank?
+              term = definition.term.tibetan_cleanup
+              if prefixes[prefix].nil?
+                tibetan_syllable = term.split(@intersyllabic_tsheg).first
+                prefix_term = process_term(nil, j, Feature::NAME_SUBJECT_ID, tibetan_syllable, prefix)
+                prefixes[prefix] = prefix_term
+                relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: @relation_type)
+                self.spreadsheet.imports.create!(item: relation)
+                puts "#{Time.now}: Term #{prefix} processed as #{prefix_term.pid}."
+                j += 1
+                prefix_position[prefix] = 1
+              end
+              syllable = wylie.gsub(@nb_space, ' ').split(' ').first.gsub(@zero_width_space, '').gsub('/', '')
+              if syllables[syllable].nil?
+                tibetan_syllable = term.split(@intersyllabic_tsheg).first
+                syllable_term = process_term(nil, prefix_position[prefix], Feature::PHRASE_SUBJECT_ID, tibetan_syllable, syllable)
+                prefix_position[prefix] += 1
+                syllables[syllable] = syllable_term
+                relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: @relation_type)
+                self.spreadsheet.imports.create!(item: relation)
+                puts "#{Time.now}: Syllable #{syllable} processed as #{syllable_term.pid}."
+                syllable_position[syllable] = 1
+              end
+              word = Feature.search_expression(term)
+              if word.nil?
+                word = process_term(definition.id, syllable_position[syllable], Feature::EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
+                syllable_position[syllable] += 1
+                relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: @relation_type)
+                self.spreadsheet.imports.create!(item: relation)
+                puts "#{Time.now}: Word #{definition.wylie} processed as #{word.pid}."
+              end
             end
-            syllable = wylie.gsub(@nb_space, ' ').split(' ').first.gsub(@zero_width_space, '').gsub('/', '')
-            if syllables[syllable].nil?
-              tibetan_syllable = term.split(@intersyllabic_tsheg).first
-              syllable_term = process_term(nil, prefix_position[prefix], Feature::PHRASE_SUBJECT_ID, tibetan_syllable, syllable)
-              prefix_position[prefix] += 1
-              syllables[syllable] = syllable_term
-              relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: @relation_type)
-              self.spreadsheet.imports.create!(item: relation)
-              puts "#{Time.now}: Syllable #{syllable} processed as #{syllable_term.pid}."
-              syllable_position[syllable] = 1
-            end
-            word = Feature.search_expression(term)
-            if word.nil?
-              word = process_term(definition.id, syllable_position[syllable], Feature::EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
-              syllable_position[syllable] += 1
-              relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: @relation_type)
-              self.spreadsheet.imports.create!(item: relation)
-              puts "#{Time.now}: Word #{definition.wylie} processed as #{word.pid}."
-            end
+          rescue Exception => e
+            STDERR.puts e.to_s
           end
         end
         Spawnling.wait([sid])
@@ -79,6 +83,232 @@ module DictionaryToTerms
       end
       process_triggers
     end
+    
+    def run_old_definition_import(from = nil, to = nil)
+      attrs = { task_code: 'dtt-old-definition-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
+      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
+      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
+      definitions = Dictionary::OldDefinition.all.order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        sid = Spawnling.new do
+          begin
+            puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
+            word_str = term_str.tibetan_cleanup
+            word = Feature.search_expression(word_str)
+            if word.nil?
+              word = add_term(definition.id, word_str)
+              STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
+            end
+            process_old_definition(word, definition) if !word.nil?
+          rescue Exception => e
+            STDERR.puts e.to_s
+          end
+        end
+        Spawnling.wait([sid])
+      end
+    end
+    
+    def run_definition_import(from = nil, to = nil)
+      attrs = { task_code: 'dtt-definition-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
+      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
+      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
+      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        sid = Spawnling.new do
+          begin
+            puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
+            word_str = term_str.tibetan_cleanup
+            word = Feature.search_expression(word_str)
+            if word.nil?
+              word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
+              STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
+            end
+            process_definition(word, definition) if !word.nil?
+          rescue Exception => e
+            STDERR.puts e.to_s
+          end
+        end
+        Spawnling.wait([sid])
+      end
+    end
+    
+    def run_subjects_import(from = nil, to = nil)
+      attrs = { task_code: 'dtt-definition-subjects-import' }
+      task = ImportationTask.find_by(attrs)
+      task = ImportationTask.create!(attrs) if task.nil?
+      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
+      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
+      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        word_str = term_str.tibetan_cleanup
+        word = Feature.search_expression(word_str)
+        if word.nil?
+          STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found in already imported terms." if word.nil?
+          next
+        end
+        sid = Spawnling.new do
+          begin
+            puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
+            puts "#{Time.now}: Processing subject associations for TID #{word.fid} (#{definition.id})."
+            process_subjects(definition, word.subject_term_associations, word.definitions)
+          rescue Exception => e
+            STDERR.puts e.to_s
+          end
+        end
+        Spawnling.wait([sid])
+      end
+    end
+    
+    def run_tree_classification
+      roman = View.get_by_code('roman.popular')
+      Feature.current_roots(@tib_alpha, roman).each do |letter_term|
+        if letter_term.subject_term_associations.empty?
+          a = letter_term.subject_term_associations.create!(subject_id: Feature::LETTER_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+          puts "#{Time.now}: #{letter_term.prioritized_name(roman).name} #{letter_term.pid} marked as letter." if !a.nil?
+        end
+        letter_term.current_children(@tib_alpha, roman).each do |name_term|
+          if name_term.subject_term_associations.empty?
+            a = name_term.subject_term_associations.create!(subject_id: Feature::NAME_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+            puts "#{Time.now}: #{name_term.prioritized_name(roman).name} #{name_term.pid} marked as name." if !a.nil?
+          end
+          sid = Spawnling.new do
+            begin
+              puts "Spawning sub-process #{Process.pid}."
+              name_term.current_children(@tib_alpha, roman).each do |phrase_term|
+                if phrase_term.subject_term_associations.empty?
+                  a = phrase_term.subject_term_associations.create!(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                  puts "#{Time.now}: #{phrase_term.prioritized_name(roman).name} #{phrase_term.pid} marked as phrase." if !a.nil?
+                end
+                phrase_term.current_children(@tib_alpha, roman).each do |expression_term|
+                  if expression_term.subject_term_associations.empty?
+                    a = expression_term.subject_term_associations.create!(subject_id: Feature::EXPRESSION_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                    puts "#{Time.now}: #{expression_term.prioritized_name(roman).name} #{expression_term.pid} marked as expression." if !a.nil?
+                  end
+                end
+              end
+            rescue Exception => e
+              STDERR.puts e.to_s
+            end
+          end
+          Spawnling.wait([sid])
+        end
+      end
+    end
+    
+    def check_old_definitions(from = nil, to = nil)
+      definitions = Dictionary::OldDefinition.all.order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |d|
+        term = d.term.tibetan_cleanup
+        response = addable(term)
+        if !response.instance_of? Feature
+          if response
+            puts "#{term} (#{d.id}) not found but can be added."
+          else
+            puts "#{term} (#{d.id}) cannot be added."
+          end
+        end
+      end
+    end
+    
+    def check_head_terms(from = nil, to = nil)
+      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
+      definitions = definitions.where(['id >= ?', from]) if !from.blank?
+      definitions = definitions.where(['id <= ?', to]) if !to.blank?
+      definitions.each do |definition|
+        term_str = definition.term
+        next if term_str.blank?
+        word_str = term_str.tibetan_cleanup
+        response = addable(word_str)
+        if !response.instance_of? Feature
+          if response
+            puts "#{word_str} (#{definition.id}) not found but can be added."
+          else
+            puts "#{word_str} (#{definition.id}) cannot be added."
+          end
+        end
+      end
+    end
+    
+    def run_tree_flattening_into_third_level
+      v = View.get_by_code('roman.scholar')
+      Feature.roots.order(:position).collect do |letter|
+        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+        root = Math.sqrt(expression_number).floor
+        name_terms = letter.children
+        puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
+        for name_term in name_terms
+          sid = Spawnling.new do
+            begin
+              puts "#{Time.now}: Spawning sub-process #{Process.pid} for the collapse of #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
+              expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+              phrase_relations = name_term.child_relations
+              if expression_number <= root || phrase_relations.size==1
+                for phrase_relation in phrase_relations
+                  phrase = phrase_relation.child_node
+                  expression_relations = phrase.child_relations
+                  for expression_relation in expression_relations
+                    expression = expression_relation.child_node
+                    puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
+                    expression_relation.update_attribute(:parent_node_id, name_term.id)
+                    expression.index!
+                  end
+                  puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
+                  expression_relations.reload
+                  phrase_relation.destroy
+                  phrase.remove!
+                  phrase.destroy
+                end
+                puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
+                phrase_relations.reload
+                name_term.index!
+              else
+                for phrase_relation in phrase_relations
+                  phrase = phrase_relation.child_node
+                  puts "#{Time.now}: Moving phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
+                  phrase_relation.update_attribute(:parent_node_id, letter.id)
+                  phrase.index!
+                  phrase.children.each do |expression|
+                    puts "#{Time.now}: Reindexing expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
+                    expression.index!
+                  end
+                end
+                puts "#{Time.now}: Deleting name #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
+                phrase_relations.reload
+                name_term.remove!
+                name_term.destroy
+              end
+              puts "#{Time.now}: Finishing sub-process #{Process.pid}."
+            rescue Exception => e
+              STDERR.puts e.to_s
+            end
+          end
+          Spawnling.wait([sid])
+        end
+        name_terms.reload
+        letter.index!
+      end
+      Flare.commit
+    end
+    
+    private
     
     def process_term(old_pid, position, level_subject_id, tibetan = nil, wylie = nil, phonetic = nil)
       f = Feature.create!(fid: Feature.generate_pid, old_pid: old_pid, position: position, is_public: 1)
@@ -114,58 +344,6 @@ module DictionaryToTerms
       return f
     end
     
-    def run_definition_import(from = nil, to = nil)
-      attrs = { task_code: 'dtt-definition-import' }
-      task = ImportationTask.find_by(attrs)
-      task = ImportationTask.create!(attrs) if task.nil?
-      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
-      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
-      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
-      definitions = definitions.where(['id >= ?', from]) if !from.blank?
-      definitions = definitions.where(['id <= ?', to]) if !to.blank?
-      definitions.each do |definition|
-        term_str = definition.term
-        next if term_str.blank?
-        sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-          word_str = term_str.tibetan_cleanup
-          word = Feature.search_expression(word_str)
-          if word.nil?
-            word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
-            STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
-          end
-          process_definition(word, definition) if !word.nil?
-        end
-        Spawnling.wait([sid])
-      end
-    end
-
-    def run_old_definition_import(from = nil, to = nil)
-      attrs = { task_code: 'dtt-old-definition-import' }
-      task = ImportationTask.find_by(attrs)
-      task = ImportationTask.create!(attrs) if task.nil?
-      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
-      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
-      definitions = Dictionary::OldDefinition.all.order(:id)
-      definitions = definitions.where(['id >= ?', from]) if !from.blank?
-      definitions = definitions.where(['id <= ?', to]) if !to.blank?
-      definitions.each do |definition|
-        term_str = definition.term
-        next if term_str.blank?
-        sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-          word_str = term_str.tibetan_cleanup
-          word = Feature.search_expression(word_str)
-          if word.nil?
-            word = add_term(definition.id, word_str)
-            STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
-          end
-          process_old_definition(word, definition) if !word.nil?
-        end
-        Spawnling.wait([sid])
-      end
-    end
-    
     def add_subject(collection, subject_id, branch_id)
       if !subject_id.nil?
         options = { subject_id: subject_id }
@@ -199,33 +377,6 @@ module DictionaryToTerms
         end
         puts "#{Time.now}: Processing subject associations for sub-definition #{child.id}."
         process_subjects(child, dest_def.definition_subject_associations, dest_def.children)
-      end
-    end
-    
-    def run_subjects_import(from = nil, to = nil)
-      attrs = { task_code: 'dtt-definition-subjects-import' }
-      task = ImportationTask.find_by(attrs)
-      task = ImportationTask.create!(attrs) if task.nil?
-      self.spreadsheet = task.spreadsheets.find_by(filename: DictionaryToTerms.dictionary_database_yaml['database'])
-      self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
-      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
-      definitions = definitions.where(['id >= ?', from]) if !from.blank?
-      definitions = definitions.where(['id <= ?', to]) if !to.blank?
-      definitions.each do |definition|
-        term_str = definition.term
-        next if term_str.blank?
-        word_str = term_str.tibetan_cleanup
-        word = Feature.search_expression(word_str)
-        if word.nil?
-          STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found in already imported terms." if word.nil?
-          next
-        end
-        sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-          puts "#{Time.now}: Processing subject associations for TID #{word.fid} (#{definition.id})."
-          process_subjects(definition, word.subject_term_associations, word.definitions)
-        end
-        Spawnling.wait([sid])
       end
     end
     
@@ -457,82 +608,18 @@ module DictionaryToTerms
     def process_triggers
       Feature.all.each do |f|
         sid = Spawnling.new do
-          puts "Spawning sub-process #{Process.pid}."
-          f.update_hierarchy
-          f.update_cached_feature_names
-          f.update_name_positions
-          f.names.first.ensure_one_primary
-          puts "#{Time.now}: Triggers updated for #{f.pid}."
+          begin
+            puts "Spawning sub-process #{Process.pid}."
+            f.update_hierarchy
+            f.update_cached_feature_names
+            f.update_name_positions
+            f.names.first.ensure_one_primary
+            puts "#{Time.now}: Triggers updated for #{f.pid}."
+          rescue Exception => e
+            STDERR.puts e.to_s
+          end
         end
         Spawnling.wait([sid])
-      end
-    end
-    
-    def run_tree_classification
-      roman = View.get_by_code('roman.popular')
-      Feature.current_roots(@tib_alpha, roman).each do |letter_term|
-        if letter_term.subject_term_associations.empty?
-          a = letter_term.subject_term_associations.create!(subject_id: Feature::LETTER_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
-          puts "#{Time.now}: #{letter_term.prioritized_name(roman).name} #{letter_term.pid} marked as letter." if !a.nil?
-        end
-        letter_term.current_children(@tib_alpha, roman).each do |name_term|
-          if name_term.subject_term_associations.empty?
-            a = name_term.subject_term_associations.create!(subject_id: Feature::NAME_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
-            puts "#{Time.now}: #{name_term.prioritized_name(roman).name} #{name_term.pid} marked as name." if !a.nil?
-          end
-          sid = Spawnling.new do
-            puts "Spawning sub-process #{Process.pid}."
-            name_term.current_children(@tib_alpha, roman).each do |phrase_term|
-              if phrase_term.subject_term_associations.empty?
-                a = phrase_term.subject_term_associations.create!(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
-                puts "#{Time.now}: #{phrase_term.prioritized_name(roman).name} #{phrase_term.pid} marked as phrase." if !a.nil?
-              end
-              phrase_term.current_children(@tib_alpha, roman).each do |expression_term|
-                if expression_term.subject_term_associations.empty?
-                  a = expression_term.subject_term_associations.create!(subject_id: Feature::EXPRESSION_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
-                  puts "#{Time.now}: #{expression_term.prioritized_name(roman).name} #{expression_term.pid} marked as expression." if !a.nil?
-                end
-              end            
-            end
-          end
-          Spawnling.wait([sid])
-        end
-      end
-    end
-    
-    def check_old_definitions(from = nil, to = nil)
-      definitions = Dictionary::OldDefinition.all.order(:id)
-      definitions = definitions.where(['id >= ?', from]) if !from.blank?
-      definitions = definitions.where(['id <= ?', to]) if !to.blank?
-      definitions.each do |d|
-        term = d.term.tibetan_cleanup
-        response = addable(term)
-        if !response.instance_of? Feature
-          if response
-            puts "#{term} (#{d.id}) not found but can be added."
-          else
-            puts "#{term} (#{d.id}) cannot be added."
-          end
-        end
-      end
-    end
-    
-    def check_head_terms(from = nil, to = nil)
-      definitions = Dictionary::Definition.where(level: 'head term').order(:id)
-      definitions = definitions.where(['id >= ?', from]) if !from.blank?
-      definitions = definitions.where(['id <= ?', to]) if !to.blank?
-      definitions.each do |definition|
-        term_str = definition.term
-        next if term_str.blank?
-        word_str = term_str.tibetan_cleanup
-        response = addable(word_str)
-        if !response.instance_of? Feature
-          if response
-            puts "#{word_str} (#{definition.id}) not found but can be added."
-          else
-            puts "#{word_str} (#{definition.id}) cannot be added."
-          end
-        end
       end
     end
   end

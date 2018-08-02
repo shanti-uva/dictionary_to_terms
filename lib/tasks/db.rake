@@ -83,9 +83,11 @@ namespace :dictionary_to_terms do
         end
       end
       
-      desc "Run tree flattening"
-      task flatten: :environment do
-        DictionaryToTerms::TreeProcessing.new.run_tree_flattening
+      namespace :flatten do
+        desc "Run tree flattening"
+        task third: :environment do
+          DictionaryToTerms::TreeProcessing.new.run_tree_flattening_into_third_level
+        end
       end
     end
   end
