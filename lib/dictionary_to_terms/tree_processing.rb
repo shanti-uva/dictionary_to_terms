@@ -247,6 +247,45 @@ module DictionaryToTerms
       end
     end
     
+    def run_tree_flattening_into_second_level
+      v = View.get_by_code('roman.scholar')
+      Feature.roots.order(:position).collect do |letter|
+        name_terms = letter.children
+        puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
+        for name_term in name_terms
+          phrase_relations = name_term.child_relations
+          sid = Spawnling.new do
+            begin
+              puts "#{Time.now}: Spawning sub-process #{Process.pid} for the collapse of #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
+              for phrase_relation in phrase_relations
+                phrase = phrase_relation.child_node
+                expression_relations = phrase.child_relations
+                for expression_relation in expression_relations
+                  expression = expression_relation.child_node
+                  puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
+                  expression_relation.update_attribute(:parent_node_id, name_term.id)
+                  expression.index!
+                end
+                puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
+                phrase.child_relations.reload
+                phrase_relation.destroy
+                phrase.remove!
+                phrase.destroy
+              end
+              puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
+              name_term.child_relations.reload
+              name_term.index!
+              puts "#{Time.now}: Finishing sub-process #{Process.pid}."
+            rescue Exception => e
+              STDERR.puts e.to_s
+            end
+          end
+          Spawnling.wait([sid])
+        end
+      end
+      Flare.commit
+    end
+    
     def run_tree_flattening_into_third_level
       v = View.get_by_code('roman.scholar')
       Feature.roots.order(:position).collect do |letter|
@@ -304,6 +343,55 @@ module DictionaryToTerms
         end
         name_terms.reload
         letter.index!
+      end
+      Flare.commit
+    end
+    
+    def run_tree_flattening_mixed
+      v = View.get_by_code('roman.scholar')
+      Feature.roots.order(:position).collect do |letter|
+        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+        root = Math.sqrt(expression_number).floor
+        name_terms = letter.children
+        puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
+        for name_term in name_terms
+          expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+          phrase_relations = name_term.child_relations
+          flatten_all = expression_number <= root || phrase_relations.size==1
+          sid = Spawnling.new do
+            begin
+              puts "#{Time.now}: Spawning sub-process #{Process.pid} for the collapse of #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
+              some_flattened = false
+              for phrase_relation in phrase_relations
+                phrase = phrase_relation.child_node
+                expression_relations = phrase.child_relations
+                if flatten_all || expression_relations.count <= 48
+                  some_flattened = true
+                  for expression_relation in expression_relations
+                    expression = expression_relation.child_node
+                    puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
+                    expression_relation.update_attribute(:parent_node_id, name_term.id)
+                    expression.index!
+                  end
+                  puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
+                  phrase.child_relations.reload
+                  phrase_relation.destroy
+                  phrase.remove!
+                  phrase.destroy
+                end
+              end
+              if some_flattened
+                puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
+                name_term.child_relations.reload
+                name_term.index!
+              end
+              puts "#{Time.now}: Finishing sub-process #{Process.pid}."          
+            rescue Exception => e
+              STDERR.puts e.to_s
+            end
+          end
+          Spawnling.wait([sid])
+        end
       end
       Flare.commit
     end
