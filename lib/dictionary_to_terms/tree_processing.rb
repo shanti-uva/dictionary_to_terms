@@ -250,18 +250,22 @@ module DictionaryToTerms
     def run_tree_flattening_into_second_level
       v = View.get_by_code('roman.scholar')
       Feature.roots.order(:position).collect do |letter|
-        name_terms = letter.children
+        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::NAME_SUBJECT_ID}
         puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
         for name_term in name_terms
           phrase_relations = name_term.child_relations
           sid = Spawnling.new do
             begin
               puts "#{Time.now}: Spawning sub-process #{Process.pid} for the collapse of #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
+              some_phrase_processed = false
               for phrase_relation in phrase_relations
                 phrase = phrase_relation.child_node
+                next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
+                some_phrase_processed = true
                 expression_relations = phrase.child_relations
                 for expression_relation in expression_relations
                   expression = expression_relation.child_node
+                  next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
                   puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                   expression_relation.update_attribute(:parent_node_id, name_term.id)
                   expression.index!
@@ -272,9 +276,11 @@ module DictionaryToTerms
                 phrase.remove!
                 phrase.destroy
               end
-              puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
-              name_term.child_relations.reload
-              name_term.index!
+              if some_phrase_processed
+                puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
+                name_term.child_relations.reload
+                name_term.index!
+              end
               puts "#{Time.now}: Finishing sub-process #{Process.pid}."
             rescue Exception => e
               STDERR.puts e.to_s
