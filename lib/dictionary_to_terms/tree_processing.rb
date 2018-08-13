@@ -297,7 +297,7 @@ module DictionaryToTerms
       Feature.roots.order(:position).collect do |letter|
         expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
         root = Math.sqrt(expression_number).floor
-        name_terms = letter.children
+        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::NAME_SUBJECT_ID}
         puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
         for name_term in name_terms
           sid = Spawnling.new do
@@ -306,11 +306,14 @@ module DictionaryToTerms
               expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
               phrase_relations = name_term.child_relations
               if expression_number <= root || phrase_relations.size==1
+                some_phrase_processed = false
                 for phrase_relation in phrase_relations
                   phrase = phrase_relation.child_node
+                  next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
                   expression_relations = phrase.child_relations
                   for expression_relation in expression_relations
                     expression = expression_relation.child_node
+                    next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression_relation.update_attribute(:parent_node_id, name_term.id)
                     expression.index!
@@ -320,25 +323,32 @@ module DictionaryToTerms
                   phrase_relation.destroy
                   phrase.remove!
                   phrase.destroy
+                  some_phrase_processed = true
                 end
-                puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
-                phrase_relations.reload
-                name_term.index!
+                if some_phrase_processed
+                  puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
+                  phrase_relations.reload
+                  name_term.index!
+                end
               else
                 for phrase_relation in phrase_relations
                   phrase = phrase_relation.child_node
+                  next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
                   puts "#{Time.now}: Moving phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                   phrase_relation.update_attribute(:parent_node_id, letter.id)
                   phrase.index!
                   phrase.children.each do |expression|
+                    next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Reindexing expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression.index!
                   end
                 end
                 puts "#{Time.now}: Deleting name #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
                 phrase_relations.reload
-                name_term.remove!
-                name_term.destroy
+                if phrase_relations.size==0 # should always be the case, unless expressions already moved here
+                  name_term.remove!
+                  name_term.destroy
+                end
               end
               puts "#{Time.now}: Finishing sub-process #{Process.pid}."
             rescue Exception => e
@@ -347,7 +357,7 @@ module DictionaryToTerms
           end
           Spawnling.wait([sid])
         end
-        name_terms.reload
+        letter.children.reload
         letter.index!
       end
       Flare.commit
