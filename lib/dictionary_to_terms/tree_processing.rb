@@ -14,6 +14,7 @@ module DictionaryToTerms
       
       @zero_width_space = Unicode::UFEFF
       @nb_space = Unicode::U00A0
+      @fixed_size = 100
       
       @default_language = Language.get_by_code('eng')
       @relation_type = FeatureRelationType.get_by_code('is.beginning.of')
@@ -401,7 +402,7 @@ module DictionaryToTerms
                 name_term.child_relations.reload
                 name_term.index!
               end
-              puts "#{Time.now}: Finishing sub-process #{Process.pid}."          
+              puts "#{Time.now}: Finishing sub-process #{Process.pid}."
             rescue Exception => e
               STDERR.puts e.to_s
             end
@@ -412,7 +413,62 @@ module DictionaryToTerms
       Flare.commit
     end
     
+    def run_tree_flattening_fixed
+      v = View.get_by_code('roman.scholar')
+      relation_type = FeatureRelationType.get_by_code('heads')
+      Feature.roots.order(:position).collect(&:fid).each do |letter_fid|
+        letter = Feature.get_by_fid(letter_fid)
+        puts "#{Time.now}: Deleting names under letter #{letter.prioritized_name(v).name}..."
+        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::NAME_SUBJECT_ID))
+        puts "#{Time.now}: Deleting phrases under letter #{letter.prioritized_name(v).name}..."
+        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::PHRASE_SUBJECT_ID))
+        # there should not be children if index was correct
+        destroy_features(letter.children.order(:fid).collect(&:fid))
+        expressions = get_term_fids_under_letter_by_phoneme(letter.fid, Feature::EXPRESSION_SUBJECT_ID)
+        head = nil
+        sid = Spawnling.new do
+          begin
+            puts "#{Time.now}: Spawning sub-process #{Process.pid} for processing of expressions under letter #{letter.prioritized_name(v).name}..."
+            expressions.each_index do |i|
+              f = Feature.get_by_fid(expressions[i])
+              if i % @fixed_size == 0
+                head = f.clone_with_names
+                FeatureRelation.create!(child_node: head, parent_node: letter, perspective: @tib_alpha, feature_relation_type: relation_type)
+                head.subject_term_associations.create(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                head.update_attributes(is_public: true, position: f.position)
+                puts "#{Time.now}: Created head #{head.prioritized_name(v).name} (#{head.fid}) under letter #{letter.prioritized_name(v).name}..."
+              end
+              FeatureRelation.create!(child_node: f, parent_node: head, perspective: @tib_alpha, feature_relation_type: relation_type)
+            end
+            puts "#{Time.now}: Finishing sub-process #{Process.pid}."
+          rescue Exception => e
+            STDERR.puts e.to_s
+          end
+        end
+        Spawnling.wait([sid])
+      end
+      Flare.commit
+    end
+    
     private
+    
+    def get_term_fids_under_letter_by_phoneme(letter_fid, phoneme_sid)
+      query = "tree:terms AND ancestor_ids_tib.alpha:#{letter_fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{phoneme_sid}"
+      numFound = Feature.search_by(query)['numFound']
+      resp = Feature.search_by(query, fl: 'uid', rows: numFound, sort: 'position_i asc')['docs']
+      resp.collect{|f| f['uid'].split('-').last.to_i}
+    end
+    
+    def destroy_features(fids)
+      fids.each do |fid|
+        f = Feature.get_by_fid(fid)
+        if !f.nil?
+          f.remove!
+          f.destroy
+          puts "#{Time.now}: Deleted term #{fid}."
+        end
+      end
+    end
     
     def process_term(old_pid, position, level_subject_id, tibetan = nil, wylie = nil, phonetic = nil)
       f = Feature.create!(fid: Feature.generate_pid, old_pid: old_pid, position: position, is_public: 1)

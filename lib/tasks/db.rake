@@ -101,6 +101,11 @@ namespace :dictionary_to_terms do
         task mixed: :environment do
           DictionaryToTerms::TreeProcessing.new.run_tree_flattening_mixed
         end
+        
+        desc "Run fixed tree flattening"
+        task fixed: :environment do
+          DictionaryToTerms::TreeProcessing.new.run_tree_flattening_fixed
+        end
       end
     end
   end
