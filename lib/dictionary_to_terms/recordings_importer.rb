@@ -20,7 +20,7 @@ module DictionaryToTerms
     def run_recording_import(from:, to:, dialect_id:, filename:, task_code: nil, force: false, source_dir: nil, log_level: nil)
       task_code ||= "dtt-recording-import"
       source_dir ||= Rails.root.join('orig_recordings')
-      log = ActiveSupport::Logger.new("log/recordings_importation_#{task_code}.log")
+      log = ActiveSupport::Logger.new("log/import_recordings_#{task_code}_#{Rails.env}.log")
       log.level = log_level.nil? ? Rails.logger.level : log_level.to_i
       if filename.nil?
         $std_err.puts "Error: recording importation task - filename required"
