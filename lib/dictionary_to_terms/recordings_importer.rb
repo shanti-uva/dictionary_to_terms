@@ -80,8 +80,8 @@ module DictionaryToTerms
               next
             end
             curr_recording = Recording.find_by(feature: term, dialect_id: dialect_id)
-            if curr_recording.nil?
-              log.info { "#{Time.now}: Creating recording for term_id: #{term.pid} and dialect_id: #{dialect_id}" }
+            if curr_recording.blank?
+              log.info { "#{Time.now}: Creating recording for term_id: #{term.fid} and dialect_id: #{dialect_id}" }
               curr_recording = Recording.create(feature: term, dialect_id: dialect_id)
               spreadsheet.imports.create!(item: curr_recording)
             elsif force
