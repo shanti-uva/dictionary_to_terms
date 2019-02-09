@@ -1,3 +1,5 @@
+require 'dictionary_to_terms/definition_processing'
+require 'dictionary_to_terms/subject_processing'
 require 'dictionary_to_terms/tree_processing'
 
 namespace :dictionary_to_terms do
@@ -13,9 +15,9 @@ namespace :dictionary_to_terms do
       to = ENV['TO']
       fid = ENV['ID']
       if fid.blank?
-        DictionaryToTerms::TreeProcessing.new.run_definition_import(from, to)
+        DictionaryToTerms::DefinitionProcessing.new.run_definition_import(from, to)
       else
-        DictionaryToTerms::TreeProcessing.new.run_definition_import(fid, fid)
+        DictionaryToTerms::DefinitionProcessing.new.run_definition_import(fid, fid)
       end
     end
     desc "Run old definition importation"
@@ -24,9 +26,9 @@ namespace :dictionary_to_terms do
       to = ENV['TO']
       fid = ENV['ID']
       if fid.blank?
-        DictionaryToTerms::TreeProcessing.new.run_old_definition_import(from, to)
+        DictionaryToTerms::DefinitionProcessing.new.run_old_definition_import(from, to)
       else
-        DictionaryToTerms::TreeProcessing.new.run_old_definition_import(fid, fid)
+        DictionaryToTerms::DefinitionProcessing.new.run_old_definition_import(fid, fid)
       end
     end
     desc "Run definition subject importation"
@@ -35,9 +37,9 @@ namespace :dictionary_to_terms do
       to = ENV['TO']
       fid = ENV['FID']
       if fid.blank?
-        DictionaryToTerms::TreeProcessing.new.run_subjects_import(from, to)
+        DictionaryToTerms::SubjectProcessing.new.run_subjects_import(from, to)
       else
-        DictionaryToTerms::TreeProcessing.new.run_subjects_import(fid, fid)
+        DictionaryToTerms::SubjectProcessing.new.run_subjects_import(fid, fid)
       end
     end
   end

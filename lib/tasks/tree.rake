@@ -1,3 +1,4 @@
+require 'dictionary_to_terms/definition_processing'
 require 'dictionary_to_terms/tree_processing'
 
 namespace :dictionary_to_terms do
@@ -14,9 +15,9 @@ namespace :dictionary_to_terms do
         to = ENV['TO']
         fid = ENV['FID']
         if fid.blank?
-          DictionaryToTerms::TreeProcessing.new.check_old_definitions(from, to)
+          DictionaryToTerms::DefinitionProcessing.new.check_old_definitions(from, to)
         else
-          DictionaryToTerms::TreeProcessing.new.check_old_definitions(fid, fid)
+          DictionaryToTerms::DefinitionProcessing.new.check_old_definitions(fid, fid)
         end
       end
 
@@ -26,9 +27,9 @@ namespace :dictionary_to_terms do
         to = ENV['TO']
         fid = ENV['FID']
         if fid.blank?
-          DictionaryToTerms::TreeProcessing.new.check_head_terms(from, to)
+          DictionaryToTerms::DefinitionProcessing.new.check_head_terms(from, to)
         else
-          DictionaryToTerms::TreeProcessing.new.check_head_terms(fid, fid)
+          DictionaryToTerms::DefinitionProcessing.new.check_head_terms(fid, fid)
         end
       end
     end
