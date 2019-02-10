@@ -22,7 +22,7 @@ module DictionaryToTerms
       return f.nil? ? nil : f
     end
 
-    def run_recording_import(from:, to:, dialect_id:, filename:, task_code: nil, force: false, source_dir: nil, log_level: nil, daylight: nil)
+    def run_recording_import(from:, to:, dialect_id:, filename:, task_code: nil, force: false, source_dir: nil, daylight: nil)
       task_code ||= "dtt-recording-import"
       source_dir ||= Rails.root.join('orig_recordings')
       if filename.nil?
