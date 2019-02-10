@@ -3,7 +3,7 @@ module DictionaryToTerms
   class RecordingsImporter
     include KmapsEngine::ProgressBar
 
-    INTERVAL = 100
+    INTERVAL = 20
 
     def self.parse_name(name)
       /^TD_Rec_(?<group>\d+)-(?<subgroup>\d+)_(?<id>\d+)\..*/.match(name)

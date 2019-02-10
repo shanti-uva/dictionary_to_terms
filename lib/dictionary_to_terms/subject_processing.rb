@@ -64,9 +64,6 @@ module DictionaryToTerms
       end
     end
     
-    def process_subject_ids(source_def, subject_associations, dest_defs)
-
-    
     def add_subject(collection, subject_id, branch_id)
       if !subject_id.nil?
         options = { subject_id: subject_id }
@@ -77,6 +74,5 @@ module DictionaryToTerms
         end
       end
     end
-    
   end
 end
