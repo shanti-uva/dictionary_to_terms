@@ -3,7 +3,7 @@ module DictionaryToTerms
   class RecordingsImporter
     include KmapsEngine::ProgressBar
 
-    INTERVAL = 20
+    INTERVAL = 100
 
     def self.parse_name(name)
       /^TD_Rec_(?<group>\d+)-(?<subgroup>\d+)_(?<id>\d+)\..*/.match(name)
@@ -70,8 +70,14 @@ module DictionaryToTerms
             end
             rec_id = rec_id_str.to_i
             self.log.debug { "Processing record: #{rec_id}" }
-            rec_filename = Dir.glob(File.join(source_dir,"*_*#{rec_id}.mp3")).sort.first
-            if rec_filename.blank?
+            filename = row['filename']
+            if !filename.blank?
+              rec_filename = File.join(source_dir, filename)
+            else
+              self.say "Missing filename for recording: #{rec_id}."
+              next
+            end
+            if !rec_filename.exist?
               self.say "File for recording: #{rec_id} doesn't exist"
               next
             end
@@ -98,10 +104,8 @@ module DictionaryToTerms
               next
             end
             begin
-              File.open(rec_filename) do |orig_file|
-                self.log.debug { "Attaching file: #{rec_filename}" }
-                curr_recording.audio_file.attach(io: orig_file, filename: File.basename(rec_filename))
-              end
+              self.log.debug { "Attaching file: #{rec_filename}" }
+              curr_recording.audio_file.attach(io: File.open(rec_filename), filename: filename, content_type: 'audio/mpeg3')
               self.progress_bar(num: i, total: to, current: rec_id)
             rescue Exception => e
               self.say "Error attaching file: #{rec_filename}\n#{e.message}"
