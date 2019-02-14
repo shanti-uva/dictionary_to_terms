@@ -62,6 +62,7 @@ module DictionaryToTerms
         sid = Spawnling.new do
           self.log.debug { "#{Time.now}: Spawning sub-process #{Process.pid}." }
           for i in current...limit
+            byebug
             row = rows[i]
             rec_id_str = row['filename_id']
             if rec_id_str.blank?
@@ -72,13 +73,13 @@ module DictionaryToTerms
             self.log.debug { "Processing record: #{rec_id}" }
             filename = row['filename']
             if !filename.blank?
-              rec_filename = File.join(source_dir, filename)
+              filepath = File.join(source_dir, filename)
             else
               self.say "Missing filename for recording: #{rec_id}."
               next
             end
-            if !rec_filename.exist?
-              self.say "File for recording: #{rec_id} doesn't exist"
+            if !File.exist? filepath
+              self.say "File #{filename} doesn't exist"
               next
             end
             old_pid = row['features.old_id']
@@ -98,17 +99,17 @@ module DictionaryToTerms
               spreadsheet.imports.create!(item: curr_recording)
             elsif force
               curr_recording.audio_file.purge
-              self.say "Recording exists, it'll be replaced with file No: #{rec_id} - #{rec_filename}"
+              self.say "Recording exists, it'll be replaced with file No: #{rec_id} - #{filename}"
             else
-              self.say "Recording already exists, skipping file No: #{rec_id} - #{rec_filename}"
+              self.say "Recording already exists, skipping file No: #{rec_id} - #{filename}"
               next
             end
             begin
-              self.log.debug { "Attaching file: #{rec_filename}" }
-              curr_recording.audio_file.attach(io: File.open(rec_filename), filename: filename, content_type: 'audio/mpeg3')
+              self.log.debug { "Attaching file: #{filename}" }
+              curr_recording.audio_file.attach(io: File.open(filepath), filename: filename, content_type: 'audio/mpeg3')
               self.progress_bar(num: i, total: to, current: rec_id)
             rescue Exception => e
-              self.say "Error attaching file: #{rec_filename}\n#{e.message}"
+              self.say "Error attaching file: #{filename}\n#{e.message}"
               next
             end
           end
