@@ -47,7 +47,7 @@
 #  updated_at                   :string(80)
 
 module Dictionary
-  class ModelSentence < ApplicationRecord
+  class ModelSentence < DictionaryRecord
     has_and_belongs_to_many :definitions, :join_table => 'definitions_model_sentences', :foreign_key => 'model_sentence_id'
     has_one :meta, :foreign_key => 'model_sentence_id'
     # belongs_to :definition, :foreign_key => "def_id"

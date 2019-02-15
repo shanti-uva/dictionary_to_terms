@@ -62,7 +62,6 @@ module DictionaryToTerms
         sid = Spawnling.new do
           self.log.debug { "#{Time.now}: Spawning sub-process #{Process.pid}." }
           for i in current...limit
-            byebug
             row = rows[i]
             rec_id_str = row['filename_id']
             if rec_id_str.blank?

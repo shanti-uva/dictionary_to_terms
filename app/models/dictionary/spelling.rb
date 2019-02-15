@@ -46,7 +46,7 @@
 #  updated_at                   :string(80)
 
 module Dictionary
-  class Spelling < ApplicationRecord
+  class Spelling < DictionaryRecord
     has_one :meta, :foreign_key => 'spelling_id'
     belongs_to :definition, :foreign_key => "definition_id"
 

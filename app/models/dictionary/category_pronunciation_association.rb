@@ -1,5 +1,5 @@
 module Dictionary
-  class CategoryPronunciationAssociation < ApplicationRecord
+  class CategoryPronunciationAssociation < DictionaryRecord
     belongs_to :category
     belongs_to :pronunciation
   end

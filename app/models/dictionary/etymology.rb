@@ -47,7 +47,7 @@
 #  created_at                   :string(80)
 #  updated_at                   :string(80)
 module Dictionary
-  class Etymology < ApplicationRecord
+  class Etymology < DictionaryRecord
     has_one :meta, :foreign_key => 'etymology_id'
     has_many :translations, :foreign_key => 'etymology_id'
     belongs_to :definition, :foreign_key => 'definition_id'

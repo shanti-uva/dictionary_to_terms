@@ -15,7 +15,7 @@
 #  created_at        :string(80)
 #  updated_at        :string(80)
 module Dictionary
-  class DefinitionDefinitionForm < ApplicationRecord
+  class DefinitionDefinitionForm < DictionaryRecord
     belongs_to :definition_to, :class_name => "Definition", :foreign_key => "def2_id"
     belongs_to :definition_from, :class_name => "Definition", :foreign_key => "def1_id"
     has_one :meta, :foreign_key => 'definition_definition_form_id'

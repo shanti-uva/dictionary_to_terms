@@ -2,7 +2,7 @@ require 'digest/sha1'
 
 # this model expects a certain database layout and its based on the name/login pattern. 
 module Dictionary
-  class User < ApplicationRecord
+  class User < DictionaryRecord
   
     # Please change the salt to something else, 
     # Every application should use a different one 

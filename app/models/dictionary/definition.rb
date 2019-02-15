@@ -59,7 +59,7 @@
 #  created_at                      :string(80)
 #  updated_at                      :string(80)
 module Dictionary
-  class Definition < ApplicationRecord
+  class Definition < DictionaryRecord
   
     #has_many :definition_definition_forms, :foreign_key => 'term_id'
     has_many :definition_definition_form_tos, :class_name => "DefinitionDefinitionForm", :foreign_key => "def2_id"

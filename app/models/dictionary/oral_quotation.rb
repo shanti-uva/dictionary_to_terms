@@ -1,5 +1,5 @@
 module Dictionary
-  class OralQuotation < ApplicationRecord
+  class OralQuotation < DictionaryRecord
     has_one :meta, :foreign_key => 'oral_quotation_id'
     has_and_belongs_to_many :definitions, :join_table => 'definitions_oral_quotations', :foreign_key => 'oral_quotation_id'
     # belongs_to :definition, :foreign_key => "def_id"

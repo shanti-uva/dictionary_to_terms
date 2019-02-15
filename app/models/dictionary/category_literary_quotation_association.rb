@@ -1,5 +1,5 @@
 module Dictionary
-  class CategoryLiteraryQuotationAssociation < ApplicationRecord
+  class CategoryLiteraryQuotationAssociation < DictionaryRecord
     belongs_to :category
     belongs_to :literary_quotation
   end

@@ -1,5 +1,5 @@
 module Dictionary
-  class DefinitionCategoryAssociation < ApplicationRecord
+  class DefinitionCategoryAssociation < DictionaryRecord
     belongs_to :category
     belongs_to :definition
   

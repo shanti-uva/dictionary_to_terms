@@ -20,7 +20,7 @@
 #  updated_at            :string(80)
 
 module Dictionary
-  class Translation < ApplicationRecord
+  class Translation < DictionaryRecord
     has_one :meta, :foreign_key => 'translation_id'
     belongs_to :etymology, :foreign_key => 'etymology_id'
     belongs_to :definition, :foreign_key => 'definition_id'

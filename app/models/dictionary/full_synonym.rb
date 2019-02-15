@@ -11,7 +11,7 @@
 #  created_at     :string(80)
 #  updated_at     :string(80)
 module Dictionary
-  class FullSynonym < ApplicationRecord
+  class FullSynonym < DictionaryRecord
     has_one :meta, :foreign_key => 'full_synonym_id'
     has_and_belongs_to_many :definitions, :join_table => 'definition_full_synonyms', :association_foreign_key => 'definition_id', :foreign_key => 'full_synonym_id'
 

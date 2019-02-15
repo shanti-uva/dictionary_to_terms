@@ -13,7 +13,7 @@
 #  updated_at     :string(80)
 
 module Dictionary
-  class DefinitionDefinition < ApplicationRecord
+  class DefinitionDefinition < DictionaryRecord
     belongs_to :sub_definition, :class_name => "Definition", :foreign_key => "def2_id"
     belongs_to :super_definition, :class_name => "Definition", :foreign_key => "def1_id"  
   end

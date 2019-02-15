@@ -33,7 +33,7 @@
 #  updated_at               :string(80)
 
 module Dictionary
-  class TranslationEquivalent < ApplicationRecord
+  class TranslationEquivalent < DictionaryRecord
     has_one :meta, :foreign_key => 'translation_equivalent_id'
     belongs_to :definition, :foreign_key => "def_id"
 

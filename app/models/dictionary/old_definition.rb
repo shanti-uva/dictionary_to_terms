@@ -1,5 +1,5 @@
 module Dictionary
-  class OldDefinition < ApplicationRecord
+  class OldDefinition < DictionaryRecord
   end
 end
 

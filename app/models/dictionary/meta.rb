@@ -37,7 +37,7 @@
 #  updated_at                    :string(80)
 
 module Dictionary
-  class Meta < ApplicationRecord
+  class Meta < DictionaryRecord
     belongs_to :definition, :foreign_key => 'definition_id'
     belongs_to :translation, :foreign_key => 'translation_id'
     belongs_to :spelling, :foreign_key => 'spelling_id'

@@ -65,7 +65,7 @@
 #  updated_at                      :string(80)
 
 module Dictionary
-  class LiteraryQuotation < ApplicationRecord
+  class LiteraryQuotation < DictionaryRecord
     has_one :meta, :foreign_key => 'literary_quotation_id'
     has_and_belongs_to_many :definitions, :join_table => 'definitions_literary_quotations', :foreign_key => 'literary_quotation_id'
     # belongs_to :definition, :foreign_key => "def_id"

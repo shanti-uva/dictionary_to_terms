@@ -1,5 +1,5 @@
 module Dictionary
-  class CategorySpellingAssociation < ApplicationRecord
+  class CategorySpellingAssociation < DictionaryRecord
     belongs_to :category
     belongs_to :spelling
   end

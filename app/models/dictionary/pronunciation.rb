@@ -44,7 +44,7 @@
 #  updated_at                   :string(80)
 
 module Dictionary
-  class Pronunciation < ApplicationRecord
+  class Pronunciation < DictionaryRecord
     has_one :meta, :foreign_key => 'pronunciation_id'
     belongs_to :definition, :foreign_key => "def_id"
 
