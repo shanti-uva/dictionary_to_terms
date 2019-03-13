@@ -16,6 +16,7 @@ namespace :dictionary_to_terms do
       dialect_id = ENV['DIALECT']
       log_level = ENV['LOG_LEVEL']
       daylight = ENV['DAYLIGHT']
+      task_code ||= "dtt-recording-import"
       DictionaryToTerms::RecordingsImporter.new("log/import_recordings_#{task_code}_#{Rails.env}.log",log_level).
         run_recording_import(from: from, to: to, dialect_id: dialect_id, filename: source, task_code: task_code, force: force, source_dir: source_dir, daylight: daylight)
     end
