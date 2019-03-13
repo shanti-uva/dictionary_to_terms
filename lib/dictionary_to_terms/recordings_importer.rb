@@ -58,7 +58,7 @@ module DictionaryToTerms
         limit = current + INTERVAL
         limit = to if limit > to
         limit = rows.size if limit > rows.size
-        RecordingsImporter.wait_if_business_hours(daylight)
+        self.wait_if_business_hours(daylight)
         sid = Spawnling.new do
           self.log.debug { "#{Time.now}: Spawning sub-process #{Process.pid}." }
           for i in current...limit
