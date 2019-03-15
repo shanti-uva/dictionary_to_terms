@@ -65,16 +65,16 @@ module DictionaryToTerms
             row = rows[i]
             rec_id_str = row['filename_id']
             if rec_id_str.blank?
-              self.say "Error: filename id can't be empty in line #{i + 1}"
+              self.say "Error: filename_id can't be empty in line #{i + 1}"
               next
             end
             rec_id = rec_id_str.to_i
-            self.log.debug { "Processing record: #{rec_id}" }
+            self.log.debug { "Processing record #{rec_id}" }
             filename = row['filename']
             if !filename.blank?
               filepath = File.join(source_dir, filename)
             else
-              self.say "Missing filename for recording: #{rec_id}."
+              self.say "Missing filename for record #{rec_id}"
               next
             end
             if !File.exist? filepath
@@ -83,24 +83,24 @@ module DictionaryToTerms
             end
             old_pid = row['features.old_id']
             if old_pid.blank?
-              self.say "Error: old pid can't be empty in line #{i + 1}"
+              self.say "Error: old pid can't be empty for record #{rec_id}"
               next
             end
             term = RecordingsImporter.map_old_id(old_pid)
             if term.nil?
-              self.say "Error: dictionary id not found with old_pid #{row['features.old_id']}"
+              self.say "Error: dictionary id not found with old_pid #{row['features.old_id']} for record #{rec_id}"
               next
             end
             curr_recording = Recording.find_by(feature: term, dialect_id: dialect_id)
             if curr_recording.blank?
-              self.log.info { "#{Time.now}: Creating recording for term_id: #{term.fid} and dialect_id: #{dialect_id}" }
+              self.log.info { "#{Time.now}: Creating recording for record #{rec_id} for term #{term.pid} and dialect #{dialect_id}" }
               curr_recording = Recording.create(feature: term, dialect_id: dialect_id)
               spreadsheet.imports.create!(item: curr_recording)
             elsif force
               curr_recording.audio_file.purge
-              self.say "Recording exists, it'll be replaced with file No: #{rec_id} - #{filename}"
+              self.say "Recording #{curr_recording.id} (record #{rec_id}) already exists (#{curr_recording.audio_file.filename.to_s}) for term #{term.pid}, it'll be replaced with file #{filename}."
             else
-              self.say "Recording already exists, skipping file No: #{rec_id} - #{filename}"
+              self.say "Recording #{curr_recording.id} (record #{rec_id}) already exists (#{curr_recording.audio_file.filename.to_s}) for term #{term.pid}, skipping file #{filename}."
               next
             end
             begin
