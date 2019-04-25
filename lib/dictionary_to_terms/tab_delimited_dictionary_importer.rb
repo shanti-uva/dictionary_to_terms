@@ -30,7 +30,7 @@ module DictionaryToTerms
       current_term = nil
       latest_definition = nil
       dictionary = {}
-      from = from.nil? ? 0 : from.to_i
+      from = from.nil? ? 1 : from.to_i
       to = to.nil? ? rows.size : to.to_i
       current = from
       ipc_reader, ipc_writer = IO.pipe('ASCII-8BIT')
@@ -38,16 +38,16 @@ module DictionaryToTerms
       STDOUT.flush
       counterOfNew = 0
       puts "Current: #{current} to: #{to}"
-      while current < to
+      while current <= to
       puts ">Current: #{current} to: #{to}"
         limit = current + INTERVAL
-        limit = to if limit > to
+        limit = to if limit >= to
         limit = rows.size if limit > rows.size
         self.wait_if_business_hours(daylight)
         sid = Spawnling.new do
           self.log.debug { "#{Time.now}: Spawning sub-process #{Process.pid}." }
           puts "Going from #{current} to #{limit}"
-          for i in current...limit
+          for i in (current - 1)...limit
             entry = rows[i].split("\t")
             puts "PRocessing #{i} === #{entry}"
             self.log.debug { "#{Time.now}: processing row[#{i}] : #{rows[i]}" }
@@ -72,6 +72,7 @@ module DictionaryToTerms
                 if !info_source.nil?
                   citation = latest_definition.citations.create!(info_source: info_source)
                   puts "Creating the citation #{info_source}"
+                  binding.pry
                   spreadsheet.imports.create!(item: citation)
                 end
               end
@@ -87,6 +88,7 @@ module DictionaryToTerms
             end
             self.progress_bar(num: i, total: to, current: i)
             current_term = Feature.search_expression(current_entry.tibetan_cleanup)
+            puts "Current: #{current}"
           end
           ipc_hash = { bar: self.bar, num_errors: self.num_errors, valid_point: self.valid_point, counterOfNew: counterOfNew }
           data = Marshal.dump(ipc_hash)
@@ -101,7 +103,7 @@ module DictionaryToTerms
         ipc_hash = Marshal.load(data)
         self.update_progress_bar(bar: ipc_hash[:bar], num_errors: ipc_hash[:num_errors], valid_point: ipc_hash[:valid_point])
         counterOfNew = ipc_hash[:counterOfNew].to_i
-        current = limit
+        current = limit + 1
       end
       ipc_writer.close
       end_time = Time.now

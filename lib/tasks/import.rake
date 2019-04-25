@@ -45,7 +45,7 @@ namespace :dictionary_to_terms do
     end
     desc "Run tab delimited definition importation form tab separated file.\n"+
       "Syntax: rake dictionary_to_terms:import:tab_delimited_dictionary FILE=path/to/tab-separated-dictionary\n" +
-      " [TASK=task_code] [FROM=entry num] [TO=entry num] [INFOSOURCE=name_of_source_dictionary] [LANGUAGE=language_code]\n"+
+      " [TASK=task_code] [FROM=entry num] [TO=entry num] [INFO_SOURCE=name_of_source_dictionary] [LANGUAGE=language_code]\n"+
       " [LOG_LEVEL=0|1|2|3|4|5] [DAYLIGHT=any_text_to_run_only_after_work_hours]\n\n"+
       "LOG_LEVEL 0 - :debug | 1 - :info | 2 - :warn | 3 - :error | 4 - :fatal | 5 - :unknown "
     task tab_delimited_dictionary: :environment do
@@ -55,7 +55,7 @@ namespace :dictionary_to_terms do
       to = ENV['TO']
       log_level = ENV['LOG_LEVEL']
       daylight = ENV['DAYLIGHT']
-      info_source_name = ENV['INFOSOURCE']
+      info_source_name = ENV['INFO_SOURCE']
       language_code = ENV['LANGUAGE']
       task_code ||= "dtt-tab-delimited-dictionary-import"
       DictionaryToTerms::TabDelimitedDictionaryImporter.new("log/import_tab_delimited_dictionary_#{task_code}_#{Rails.env}.log", log_level).import(filename: filename, from: from, to: to, task_code: task_code, info_source_name: info_source_name, language_code: language_code, daylight: daylight)
