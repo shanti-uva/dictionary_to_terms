@@ -25,11 +25,13 @@ module DictionaryToTerms
       info_source = InfoSource.find_by(info_source_attrs)
       info_source = InfoSource.create!(info_source_attrs.merge(code: info_source_name)) if info_source.nil?
 
+      tib_alpha = Perspective.get_by_code('tib.alpha')
+      relation_type = FeatureRelationType.get_by_code('is.beginning.of')
+
       language = Language.get_by_code(language_code)
       current_entry = ""
       current_term = nil
       latest_definition = nil
-      dictionary = {}
       from = from.nil? ? 1 : from.to_i
       to = to.nil? ? rows.size : to.to_i
       current = from
@@ -37,49 +39,47 @@ module DictionaryToTerms
       ipc_writer.set_encoding('ASCII-8BIT')
       STDOUT.flush
       counterOfNew = 0
-      puts "Current: #{current} to: #{to}"
       while current <= to
-      puts ">Current: #{current} to: #{to}"
         limit = current + INTERVAL
         limit = to if limit >= to
         limit = rows.size if limit > rows.size
         self.wait_if_business_hours(daylight)
         sid = Spawnling.new do
           self.log.debug { "#{Time.now}: Spawning sub-process #{Process.pid}." }
-          puts "Going from #{current} to #{limit}"
           for i in (current - 1)...limit
             entry = rows[i].split("\t")
-            puts "PRocessing #{i} === #{entry}"
             self.log.debug { "#{Time.now}: processing row[#{i}] : #{rows[i]}" }
             if entry.count > 1 # it contains a entry
               self.log.debug { "#{Time.now}: Row: #{i}, has an entry. Term: #{entry[0]}" }
               current_entry = entry[0].tibetan_cleanup
               current_term = Feature.search_expression(current_entry)
-              # just for debug, this is a term with its definition
-              dictionary[current_entry] = "Feature: #{current_term} || " + entry[1..-1].join(" ")
               if current_term.nil?
                 # need to implement adding a new term and add the new definition
-                self.say "Term missing: #{current_entry}"
-                counterOfNew += 1
-              else
-                definitions = current_term.definitions
-                position = definitions.maximum(:position)
-                position = position.nil? ? 1 : position + 1
-                puts "Adding new definition to term: #{current_term.fid}"
-                latest_definition = current_term.definitions.create!({ is_public: true, position: position, language: language, content: entry[1] })
-                puts "Added the definition"
-                spreadsheet.imports.create!(item: latest_definition)
-                if !info_source.nil?
-                  citation = latest_definition.citations.create!(info_source: info_source)
-                  puts "Creating the citation #{info_source}"
-                  binding.pry
-                  spreadsheet.imports.create!(item: citation)
+                self.log.debug "New Term: #{current_entry}"
+                parent = TermsService.recursive_trunk_for(current_entry)
+                if parent.ancestors_by_perspective(tib_alpha).count != 2
+                  self.say "There is a problem for term: #{current_entry} with calculated parent: #{parent.pid} in herarchy. Skipping term creation."
+                  self.progress_bar(num: i, total: to, current: i)
+                  next
                 end
+                current_term = TermsService.add_term(Feature::EXPRESSION_SUBJECT_ID, current_entry, nil)
+                FeatureRelation.create!(child_node: current_term, parent_node: parent, perspective: tib_alpha, feature_relation_type: relation_type)
+
+                ts = TermsService.new(parent)
+                ts.reposition
+                counterOfNew += 1
+              end
+              definitions = current_term.definitions
+              position = definitions.maximum(:position)
+              position = position.nil? ? 1 : position + 1
+              latest_definition = current_term.definitions.create!({ is_public: true, position: position, language: language, content: entry[1] })
+              spreadsheet.imports.create!(item: latest_definition)
+              if !info_source.nil?
+                citation = latest_definition.citations.create!(info_source: info_source)
+                spreadsheet.imports.create!(item: citation)
               end
             else
               self.log.debug { "#{Time.now}: Row: #{i}, has only blob data #{entry[0]}" }
-              # just for debug, add the blob to the temporary dictionary[current_entry]'s definition
-              dictionary[current_entry] += " #{entry[0]}"
               if !current_term.nil? && !latest_definition.nil?
                 latest_definition.content += " " + entry[0]
                 latest_definition.save!
@@ -87,8 +87,6 @@ module DictionaryToTerms
               end
             end
             self.progress_bar(num: i, total: to, current: i)
-            current_term = Feature.search_expression(current_entry.tibetan_cleanup)
-            puts "Current: #{current}"
           end
           ipc_hash = { bar: self.bar, num_errors: self.num_errors, valid_point: self.valid_point, counterOfNew: counterOfNew }
           data = Marshal.dump(ipc_hash)
@@ -108,7 +106,7 @@ module DictionaryToTerms
       ipc_writer.close
       end_time = Time.now
       duration = (end_time - start_time) / 1.minute
-      puts "Total number of entries: #{dictionary.count} Total of new Entries: #{counterOfNew}"
+      puts "Total of new Entries: #{counterOfNew}"
       self.log.info { "#{Time.now}: Importation finished #{end_time}; started at #{start_time} with a duration of #{duration} minutes." }
       self.close_log
       STDOUT.flush
