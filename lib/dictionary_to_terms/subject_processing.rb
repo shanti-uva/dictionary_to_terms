@@ -1,6 +1,7 @@
+require 'dictionary_to_terms/processing'
+
 module DictionaryToTerms
-  class DefinitionProcessing
-    attr_accessor :spreadsheet
+  class SubjectProcessing < Processing
     
     def run_subjects_import(from = nil, to = nil)
       attrs = { task_code: 'dtt-definition-subjects-import' }
@@ -40,16 +41,16 @@ module DictionaryToTerms
     end
     
     def process_subject_ids(source_def, subject_associations, dest_defs)
-      add_subject(subject_associations, source_def.grammatical_function_type_id, 5812) # or specifically tibetan: 286?
-      add_subject(subject_associations, source_def.language_context_type_id, 185)
-      add_subject(subject_associations, source_def.language_type_id, 184)
-      add_subject(subject_associations, source_def.literary_form_type_id, 186)
-      add_subject(subject_associations, source_def.literary_genre_type_id, 119)
-      add_subject(subject_associations, source_def.literary_period_type_id, 187)
-      add_subject(subject_associations, source_def.major_dialect_family_type_id, 301)
-      add_subject(subject_associations, source_def.register_type_id, 190)
-      add_subject(subject_associations, source_def.thematic_classification_type_id, 272)
-      source_def.definition_category_associations.each { |a| add_subject(subject_associations, a.category_id, a.category_branch_id) }
+      add_subject_id(subject_associations, source_def.grammatical_function_type_id, 5812) # or specifically tibetan: 286?
+      add_subject_id(subject_associations, source_def.language_context_type_id, 185)
+      add_subject_id(subject_associations, source_def.language_type_id, 184)
+      add_subject_id(subject_associations, source_def.literary_form_type_id, 186)
+      add_subject_id(subject_associations, source_def.literary_genre_type_id, 119)
+      add_subject_id(subject_associations, source_def.literary_period_type_id, 187)
+      add_subject_id(subject_associations, source_def.major_dialect_family_type_id, 301)
+      add_subject_id(subject_associations, source_def.register_type_id, 190)
+      add_subject_id(subject_associations, source_def.thematic_classification_type_id, 272)
+      source_def.definition_category_associations.each { |a| add_subject_id(subject_associations, a.category_id, a.category_branch_id) }
       children = source_def.super_definitions.collect{|s| s.sub_definition}.reject(&:nil?)
       children.each do |child|
         source_content = child.definition
@@ -61,17 +62,6 @@ module DictionaryToTerms
         end
         puts "#{Time.now}: Processing subject associations for sub-definition #{child.id}."
         process_subject_ids(child, dest_def.definition_subject_associations, dest_def.children)
-      end
-    end
-    
-    def add_subject(collection, subject_id, branch_id)
-      if !subject_id.nil?
-        options = { subject_id: subject_id }
-        association = collection.where(options).first
-        if association.nil?
-          association = collection.create(options.merge(branch_id: branch_id))
-          self.spreadsheet.imports.create!(item: association)
-        end
       end
     end
   end
