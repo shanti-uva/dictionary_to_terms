@@ -55,10 +55,6 @@ module DictionaryToTerms
         attrs = { content: source_content }
         dest_def = word.definitions.where(attrs).first
         if dest_def.nil?
-<<<<<<< HEAD
-=======
-          byebug if dest_language.nil?
->>>>>>> d67f45a... adding importation of etymologies from old dictionary
           dest_def = word.definitions.create!(attrs.merge(is_public: true, position: position, language: dest_language, author: dest_person, numerology: source_def.numerology, tense: source_def.tense))
           self.spreadsheet.imports.create!(item: dest_def)
           puts "#{Time.now}: Adding #{source_def.id} as #{parent_def.nil? ? 'root' : 'child'} definition for #{word.fid}."

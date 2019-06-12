@@ -45,12 +45,8 @@ namespace :dictionary_to_terms do
     end
     desc "Run etymology importation"
     task etymologies: :environment do
-<<<<<<< HEAD
       log_level = ENV['LOG_LEVEL']
       DictionaryToTerms::EtymologyProcessing.new("log/import_dtt-etymology-import_#{Rails.env}.log", log_level.nil? ? Rails.logger.level : log_level.to_i).run_etymologies_import
-=======
-      DictionaryToTerms::EtymologyProcessing.new.run_etymologies_import
->>>>>>> d67f45a... adding importation of etymologies from old dictionary
     end
   end
 end
