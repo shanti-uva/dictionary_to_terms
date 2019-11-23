@@ -38,6 +38,8 @@
 
 module Dictionary
   class Meta < DictionaryRecord
+    self.table_name = 'metas'
+    
     belongs_to :definition, :foreign_key => 'definition_id'
     belongs_to :translation, :foreign_key => 'translation_id'
     belongs_to :spelling, :foreign_key => 'spelling_id'
