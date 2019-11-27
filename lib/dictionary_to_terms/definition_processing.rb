@@ -166,7 +166,7 @@ module DictionaryToTerms
       word = Feature.search_expression(tibetan)
       return word if !word.nil?
       syllable_str = tibetan.split(@intersyllabic_tsheg).first
-      syllable = Feature.search_by_phoneme(syllable_str, Feature::PHRASE_SUBJECT_ID)
+      syllable = Feature.search_by_phoneme(syllable_str, Feature::BOD_PHRASE_SUBJECT_ID)
       return true if !syllable.nil?
       pos = syllable_str.chars.find_index{|l| l.ord.is_tibetan_vowel?}
       letter_str = nil
@@ -190,7 +190,7 @@ module DictionaryToTerms
         STDERR.puts "#{Time.now}: Grammatical name cannot be easily identified."
         return false
       end
-      name = Feature.search_by_phoneme(name_str, Feature::NAME_SUBJECT_ID)
+      name = Feature.search_by_phoneme(name_str, Feature::BOD_NAME_SUBJECT_ID)
       return true if !name.nil?
 
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
@@ -198,7 +198,7 @@ module DictionaryToTerms
         STDERR.puts "#{Time.now}: Grammatical name not found and root letter cannot be identified."
         return false
       end
-      letter = Feature.search_by_phoneme(letter_str, Feature::LETTER_SUBJECT_ID)
+      letter = Feature.search_by_phoneme(letter_str, Feature::BOD_LETTER_SUBJECT_ID)
       if letter.nil? # Not confortable adding a new letter!
         STDERR.puts "#{Time.now}: Not confortable adding a new letter."
         return false
@@ -210,9 +210,9 @@ module DictionaryToTerms
       word = Feature.search_expression(tibetan)
       return word if !word.nil?
       syllable_str = tibetan.split(@intersyllabic_tsheg).first
-      syllable = Feature.search_by_phoneme(syllable_str, Feature::PHRASE_SUBJECT_ID)
+      syllable = Feature.search_by_phoneme(syllable_str, Feature::BOD_PHRASE_SUBJECT_ID)
       if !syllable.nil?
-        word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
+        word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
         syllable.index!
@@ -238,12 +238,12 @@ module DictionaryToTerms
         name_str = syllable_str[0...pos]
       end
       return nil if name_str.blank? # Grammatical name cannot be easily identified."
-      name = Feature.search_by_phoneme(name_str, Feature::NAME_SUBJECT_ID)
+      name = Feature.search_by_phoneme(name_str, Feature::BOD_NAME_SUBJECT_ID)
       if !name.nil?
-        syllable = process_term(old_pid, nil, Feature::PHRASE_SUBJECT_ID, syllable_str)
+        syllable = process_term(old_pid, nil, Feature::BOD_PHRASE_SUBJECT_ID, syllable_str)
         relation = FeatureRelation.create!(child_node: syllable, parent_node: name, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
-        word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
+        word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
         name.index!
@@ -253,15 +253,15 @@ module DictionaryToTerms
       end
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
       return nil if letter_str.blank? # Grammatical name not found and root letter cannot be identified.
-      letter = Feature.search_by_phoneme(letter_str, Feature::LETTER_SUBJECT_ID)
+      letter = Feature.search_by_phoneme(letter_str, Feature::BOD_LETTER_SUBJECT_ID)
       return nil if letter.nil? # Not confortable adding a new letter!
-      name = process_term(old_pid, nil, Feature::NAME_SUBJECT_ID, name_str)
+      name = process_term(old_pid, nil, Feature::BOD_NAME_SUBJECT_ID, name_str)
       relation = FeatureRelation.create!(child_node: name, parent_node: letter, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
-      syllable = process_term(old_pid, nil, Feature::PHRASE_SUBJECT_ID, syllable_str)
+      syllable = process_term(old_pid, nil, Feature::BOD_PHRASE_SUBJECT_ID, syllable_str)
       relation = FeatureRelation.create!(child_node: syllable, parent_node: name, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
-      word = process_term(old_pid, nil, Feature::EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
+      word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
       relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
       letter.index!

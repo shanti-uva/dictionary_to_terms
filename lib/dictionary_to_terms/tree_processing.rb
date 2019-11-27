@@ -24,7 +24,7 @@ module DictionaryToTerms
       self.spreadsheet = task.spreadsheets.create!(filename: DictionaryToTerms.dictionary_database_yaml['database'], imported_at: Time.now) if self.spreadsheet.nil?
       i = 1
       ComplexScripts::TibetanLetter.all.each do |letter|
-        root = process_term(nil, i, Feature::LETTER_SUBJECT_ID, letter.unicode, "#{letter.wylie}a")
+        root = process_term(nil, i, Feature::BOD_LETTER_SUBJECT_ID, letter.unicode, "#{letter.wylie}a")
         puts "#{Time.now}: Letter #{letter.wylie}a processed as #{root.pid}."
         i+=1
         sid = Spawnling.new do
@@ -43,7 +43,7 @@ module DictionaryToTerms
               term = definition.term.tibetan_cleanup
               if prefixes[prefix].nil?
                 tibetan_syllable = term.split(@intersyllabic_tsheg).first
-                prefix_term = process_term(nil, j, Feature::NAME_SUBJECT_ID, tibetan_syllable, prefix)
+                prefix_term = process_term(nil, j, Feature::BOD_NAME_SUBJECT_ID, tibetan_syllable, prefix)
                 prefixes[prefix] = prefix_term
                 relation = FeatureRelation.create!(skip_update: true, child_node: prefix_term, parent_node: root, perspective: @tib_alpha, feature_relation_type: @relation_type)
                 self.spreadsheet.imports.create!(item: relation)
@@ -54,7 +54,7 @@ module DictionaryToTerms
               syllable = wylie.gsub(@nb_space, ' ').split(' ').first.gsub(@zero_width_space, '').gsub('/', '')
               if syllables[syllable].nil?
                 tibetan_syllable = term.split(@intersyllabic_tsheg).first
-                syllable_term = process_term(nil, prefix_position[prefix], Feature::PHRASE_SUBJECT_ID, tibetan_syllable, syllable)
+                syllable_term = process_term(nil, prefix_position[prefix], Feature::BOD_PHRASE_SUBJECT_ID, tibetan_syllable, syllable)
                 prefix_position[prefix] += 1
                 syllables[syllable] = syllable_term
                 relation = FeatureRelation.create!(skip_update: true, child_node: syllable_term, parent_node: prefixes[prefix], perspective: @tib_alpha, feature_relation_type: @relation_type)
@@ -64,7 +64,7 @@ module DictionaryToTerms
               end
               word = Feature.search_expression(term)
               if word.nil?
-                word = process_term(definition.id, syllable_position[syllable], Feature::EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
+                word = process_term(definition.id, syllable_position[syllable], Feature::BOD_EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
                 syllable_position[syllable] += 1
                 relation = FeatureRelation.create!(skip_update: true, child_node: word, parent_node: syllables[syllable], perspective: @tib_alpha, feature_relation_type: @relation_type)
                 self.spreadsheet.imports.create!(item: relation)
@@ -85,12 +85,12 @@ module DictionaryToTerms
       roman = View.get_by_code('roman.popular')
       Feature.current_roots(@tib_alpha, roman).each do |letter_term|
         if letter_term.subject_term_associations.empty?
-          a = letter_term.subject_term_associations.create!(subject_id: Feature::LETTER_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+          a = letter_term.subject_term_associations.create!(subject_id: Feature::BOD_LETTER_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
           puts "#{Time.now}: #{letter_term.prioritized_name(roman).name} #{letter_term.pid} marked as letter." if !a.nil?
         end
         letter_term.current_children(@tib_alpha, roman).each do |name_term|
           if name_term.subject_term_associations.empty?
-            a = name_term.subject_term_associations.create!(subject_id: Feature::NAME_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+            a = name_term.subject_term_associations.create!(subject_id: Feature::BOD_NAME_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
             puts "#{Time.now}: #{name_term.prioritized_name(roman).name} #{name_term.pid} marked as name." if !a.nil?
           end
           sid = Spawnling.new do
@@ -98,12 +98,12 @@ module DictionaryToTerms
               puts "Spawning sub-process #{Process.pid}."
               name_term.current_children(@tib_alpha, roman).each do |phrase_term|
                 if phrase_term.subject_term_associations.empty?
-                  a = phrase_term.subject_term_associations.create!(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                  a = phrase_term.subject_term_associations.create!(subject_id: Feature::BOD_PHRASE_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
                   puts "#{Time.now}: #{phrase_term.prioritized_name(roman).name} #{phrase_term.pid} marked as phrase." if !a.nil?
                 end
                 phrase_term.current_children(@tib_alpha, roman).each do |expression_term|
                   if expression_term.subject_term_associations.empty?
-                    a = expression_term.subject_term_associations.create!(subject_id: Feature::EXPRESSION_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                    a = expression_term.subject_term_associations.create!(subject_id: Feature::BOD_EXPRESSION_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
                     puts "#{Time.now}: #{expression_term.prioritized_name(roman).name} #{expression_term.pid} marked as expression." if !a.nil?
                   end
                 end
@@ -120,7 +120,7 @@ module DictionaryToTerms
     def run_tree_flattening_into_second_level
       v = View.get_by_code('roman.scholar')
       Feature.roots.order(:position).collect do |letter|
-        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::NAME_SUBJECT_ID}
+        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::BOD_NAME_SUBJECT_ID}
         puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
         for name_term in name_terms
           phrase_relations = name_term.child_relations
@@ -130,12 +130,12 @@ module DictionaryToTerms
               some_phrase_processed = false
               for phrase_relation in phrase_relations
                 phrase = phrase_relation.child_node
-                next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
+                next if phrase.phoneme_term_associations.first.subject_id != Feature::BOD_PHRASE_SUBJECT_ID
                 some_phrase_processed = true
                 expression_relations = phrase.child_relations
                 for expression_relation in expression_relations
                   expression = expression_relation.child_node
-                  next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
+                  next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                   puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                   expression_relation.update_attribute(:parent_node_id, name_term.id)
                   expression.index!
@@ -165,25 +165,25 @@ module DictionaryToTerms
     def run_tree_flattening_into_third_level
       v = View.get_by_code('roman.scholar')
       Feature.roots.order(:position).collect do |letter|
-        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::BOD_PHONEME_SUBJECT_ID}_ls:#{Feature::BOD_EXPRESSION_SUBJECT_ID}")['numFound']
         root = Math.sqrt(expression_number).floor
-        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::NAME_SUBJECT_ID}
+        name_terms = letter.children.select{|n| n.phoneme_term_associations.first.subject_id == Feature::BOD_NAME_SUBJECT_ID}
         puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
         for name_term in name_terms
           sid = Spawnling.new do
             begin
               puts "#{Time.now}: Spawning sub-process #{Process.pid} for the collapse of #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
-              expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+              expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::BOD_PHONEME_SUBJECT_ID}_ls:#{Feature::BOD_EXPRESSION_SUBJECT_ID}")['numFound']
               phrase_relations = name_term.child_relations
               if expression_number <= root || phrase_relations.size==1
                 some_phrase_processed = false
                 for phrase_relation in phrase_relations
                   phrase = phrase_relation.child_node
-                  next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
+                  next if phrase.phoneme_term_associations.first.subject_id != Feature::BOD_PHRASE_SUBJECT_ID
                   expression_relations = phrase.child_relations
                   for expression_relation in expression_relations
                     expression = expression_relation.child_node
-                    next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
+                    next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression_relation.update_attribute(:parent_node_id, name_term.id)
                     expression.index!
@@ -203,12 +203,12 @@ module DictionaryToTerms
               else
                 for phrase_relation in phrase_relations
                   phrase = phrase_relation.child_node
-                  next if phrase.phoneme_term_associations.first.subject_id != Feature::PHRASE_SUBJECT_ID
+                  next if phrase.phoneme_term_associations.first.subject_id != Feature::BOD_PHRASE_SUBJECT_ID
                   puts "#{Time.now}: Moving phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                   phrase_relation.update_attribute(:parent_node_id, letter.id)
                   phrase.index!
                   phrase.children.each do |expression|
-                    next if expression.phoneme_term_associations.first.subject_id != Feature::EXPRESSION_SUBJECT_ID
+                    next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Reindexing expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression.index!
                   end
@@ -236,12 +236,12 @@ module DictionaryToTerms
     def run_tree_flattening_mixed
       v = View.get_by_code('roman.scholar')
       Feature.roots.order(:position).collect do |letter|
-        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+        expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{letter.fid} AND associated_subject_#{Feature::BOD_PHONEME_SUBJECT_ID}_ls:#{Feature::BOD_EXPRESSION_SUBJECT_ID}")['numFound']
         root = Math.sqrt(expression_number).floor
         name_terms = letter.children
         puts "#{Time.now}: Processing letter #{letter.prioritized_name(v).name}..."
         for name_term in name_terms
-          expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{Feature::EXPRESSION_SUBJECT_ID}")['numFound']
+          expression_number = Feature.search_by("ancestor_ids_tib.alpha:#{name_term.fid} AND associated_subject_#{Feature::BOD_PHONEME_SUBJECT_ID}_ls:#{Feature::BOD_EXPRESSION_SUBJECT_ID}")['numFound']
           phrase_relations = name_term.child_relations
           flatten_all = expression_number <= root || phrase_relations.size==1
           sid = Spawnling.new do
@@ -288,12 +288,12 @@ module DictionaryToTerms
       Feature.roots.order(:position).collect(&:fid).each do |letter_fid|
         letter = Feature.get_by_fid(letter_fid)
         puts "#{Time.now}: Deleting names under letter #{letter.prioritized_name(v).name}..."
-        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::NAME_SUBJECT_ID))
+        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::BOD_NAME_SUBJECT_ID))
         puts "#{Time.now}: Deleting phrases under letter #{letter.prioritized_name(v).name}..."
-        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::PHRASE_SUBJECT_ID))
+        destroy_features(get_term_fids_under_letter_by_phoneme(letter.fid, Feature::BOD_PHRASE_SUBJECT_ID))
         # there should not be children if index was correct
         destroy_features(letter.children.order(:fid).collect(&:fid))
-        expressions = get_term_fids_under_letter_by_phoneme(letter.fid, Feature::EXPRESSION_SUBJECT_ID)
+        expressions = get_term_fids_under_letter_by_phoneme(letter.fid, Feature::BOD_EXPRESSION_SUBJECT_ID)
         head = nil
         sid = Spawnling.new do
           begin
@@ -303,7 +303,7 @@ module DictionaryToTerms
               if i % @fixed_size == 0
                 head = f.clone_with_names
                 FeatureRelation.create!(child_node: head, parent_node: letter, perspective: @tib_alpha, feature_relation_type: relation_type)
-                head.subject_term_associations.create(subject_id: Feature::PHRASE_SUBJECT_ID, branch_id: Feature::PHONEME_SUBJECT_ID)
+                head.subject_term_associations.create(subject_id: Feature::BOD_PHRASE_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
                 head.update_attributes(is_public: true, position: f.position)
                 puts "#{Time.now}: Created head #{head.prioritized_name(v).name} (#{head.fid}) under letter #{letter.prioritized_name(v).name}..."
               end
@@ -322,7 +322,7 @@ module DictionaryToTerms
     private
     
     def get_term_fids_under_letter_by_phoneme(letter_fid, phoneme_sid)
-      query = "tree:terms AND ancestor_ids_tib.alpha:#{letter_fid} AND associated_subject_#{Feature::PHONEME_SUBJECT_ID}_ls:#{phoneme_sid}"
+      query = "tree:terms AND ancestor_ids_tib.alpha:#{letter_fid} AND associated_subject_#{Feature::BOD_PHONEME_SUBJECT_ID}_ls:#{phoneme_sid}"
       numFound = Feature.search_by(query)['numFound']
       resp = Feature.search_by(query, fl: 'uid', rows: numFound, sort: 'position_i asc')['docs']
       resp.collect{|f| f['uid'].split('-').last.to_i}
@@ -367,7 +367,7 @@ module DictionaryToTerms
         end
       end
       if f.subject_term_associations.empty?
-        a = f.subject_term_associations.create(subject_id: level_subject_id, branch_id: Feature::PHONEME_SUBJECT_ID)
+        a = f.subject_term_associations.create(subject_id: level_subject_id, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
         self.spreadsheet.imports.create!(item: a)
       end
       return f
