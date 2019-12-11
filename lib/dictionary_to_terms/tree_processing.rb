@@ -62,7 +62,7 @@ module DictionaryToTerms
                 puts "#{Time.now}: Syllable #{syllable} processed as #{syllable_term.pid}."
                 syllable_position[syllable] = 1
               end
-              word = Feature.search_expression(term)
+              word = Feature.search_bod_expression(term)
               if word.nil?
                 word = process_term(definition.id, syllable_position[syllable], Feature::BOD_EXPRESSION_SUBJECT_ID, term, definition.wylie, definition.phonetic)
                 syllable_position[syllable] += 1

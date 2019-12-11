@@ -16,7 +16,7 @@ module DictionaryToTerms
         term_str = definition.term
         next if term_str.blank?
         word_str = term_str.tibetan_cleanup
-        word = Feature.search_expression(word_str)
+        word = Feature.search_bod_expression(word_str)
         if word.nil?
           STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found in already imported terms." if word.nil?
           next

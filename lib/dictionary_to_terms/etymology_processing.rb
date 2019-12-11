@@ -33,7 +33,7 @@ module DictionaryToTerms
         else
           term = Feature.find_by_old_pid(source_def.id)
         end
-        term = Feature.search_expression(term_str) if term.nil?
+        term = Feature.search_bod_expression(term_str) if term.nil?
         next if term.nil?
         if definition_str.blank?
           etymologies = term.etymologies

@@ -25,7 +25,7 @@ module DictionaryToTerms
           begin
             puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
             word_str = term_str.tibetan_cleanup
-            word = Feature.search_expression(word_str)
+            word = Feature.search_bod_expression(word_str)
             if word.nil?
               word = add_term(definition.id, word_str)
               STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
@@ -55,7 +55,7 @@ module DictionaryToTerms
           begin
             puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
             word_str = term_str.tibetan_cleanup
-            word = Feature.search_expression(word_str)
+            word = Feature.search_bod_expression(word_str)
             if word.nil?
               word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
               STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
@@ -163,7 +163,7 @@ module DictionaryToTerms
     end
     
     def addable(tibetan)
-      word = Feature.search_expression(tibetan)
+      word = Feature.search_bod_expression(tibetan)
       return word if !word.nil?
       syllable_str = tibetan.split(@intersyllabic_tsheg).first
       syllable = Feature.search_by_phoneme(syllable_str, Feature::BOD_PHRASE_SUBJECT_ID)
@@ -207,7 +207,7 @@ module DictionaryToTerms
     end
     
     def add_term(old_pid, tibetan = nil, wylie = nil, phonetic = nil)
-      word = Feature.search_expression(tibetan)
+      word = Feature.search_bod_expression(tibetan)
       return word if !word.nil?
       syllable_str = tibetan.split(@intersyllabic_tsheg).first
       syllable = Feature.search_by_phoneme(syllable_str, Feature::BOD_PHRASE_SUBJECT_ID)

@@ -14,7 +14,7 @@ module DictionaryToTerms
       if f.nil?
         begin
           d = Dictionary::Definition.find(old_pid)
-          f = Feature.search_expression(d.term.tibetan_cleanup)
+          f = Feature.search_bod_expression(d.term.tibetan_cleanup)
         rescue ActiveRecord::RecordNotFound
           f = nil
         end
