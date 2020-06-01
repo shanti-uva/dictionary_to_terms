@@ -21,21 +21,13 @@ module DictionaryToTerms
       definitions.each do |definition|
         term_str = definition.term
         next if term_str.blank?
-        sid = Spawnling.new do
-          begin
-            puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-            word_str = term_str.tibetan_cleanup
-            word = Feature.search_bod_expression(word_str)
-            if word.nil?
-              word = add_term(definition.id, word_str)
-              STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
-            end
-            process_old_definition(word, definition) if !word.nil?
-          rescue Exception => e
-            STDERR.puts e.to_s
-          end
+        word_str = term_str.tibetan_cleanup
+        word = Feature.search_bod_expression(word_str)
+        if word.nil?
+          word = add_term(definition.id, word_str)
+          STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
         end
-        Spawnling.wait([sid])
+        process_old_definition(word, definition) if !word.nil?
       end
     end
     
@@ -51,21 +43,13 @@ module DictionaryToTerms
       definitions.each do |definition|
         term_str = definition.term
         next if term_str.blank?
-        sid = Spawnling.new do
-          begin
-            puts "Spawning sub-process #{Process.pid} for processing definition #{definition.id}"
-            word_str = term_str.tibetan_cleanup
-            word = Feature.search_bod_expression(word_str)
-            if word.nil?
-              word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
-              STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
-            end
-            process_definition(word, definition) if !word.nil?
-          rescue Exception => e
-            STDERR.puts e.to_s
-          end
+        word_str = term_str.tibetan_cleanup
+        word = Feature.search_bod_expression(word_str)
+        if word.nil?
+          word = add_term(definition.id, word_str, definition.wylie, definition.phonetic)
+          STDERR.puts "#{Time.now}: Word #{word_str} (#{definition.id}) not found and could not be added." if word.nil?
         end
-        Spawnling.wait([sid])
+        process_definition(word, definition) if !word.nil?
       end
     end
     
@@ -215,8 +199,8 @@ module DictionaryToTerms
         word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
-        syllable.index!
-        word.index!
+        syllable.queued_index(priority: Flare::IndexerJob::LOW)
+        word.queued_index(priority: Flare::IndexerJob::LOW)
         return word
       end
       pos = syllable_str.chars.find_index{|l| l.ord.is_tibetan_vowel?}
@@ -246,9 +230,9 @@ module DictionaryToTerms
         word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
         relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
         self.spreadsheet.imports.create!(item: relation)
-        name.index!
-        syllable.index!
-        word.index!
+        name.queued_index(priority: Flare::IndexerJob::LOW)
+        syllable.queued_index(priority: Flare::IndexerJob::LOW)
+        word.queued_index(priority: Flare::IndexerJob::LOW)
         return word
       end
       letter_str = name_str.tibetan_base_letter if letter_str.nil?
@@ -264,12 +248,11 @@ module DictionaryToTerms
       word = process_term(old_pid, nil, Feature::BOD_EXPRESSION_SUBJECT_ID, tibetan, wylie, phonetic)
       relation = FeatureRelation.create!(child_node: word, parent_node: syllable, perspective: @tib_alpha, feature_relation_type: @relation_type)
       self.spreadsheet.imports.create!(item: relation)
-      letter.index!
-      name.index!
-      syllable.index!
-      word.index!
+      letter.queued_index(priority: Flare::IndexerJob::LOW)
+      name.queued_index(priority: Flare::IndexerJob::LOW)
+      syllable.queued_index(priority: Flare::IndexerJob::LOW)
+      word.queued_index(priority: Flare::IndexerJob::LOW)
       return word
     end
-    
   end
 end

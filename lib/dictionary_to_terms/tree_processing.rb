@@ -138,7 +138,7 @@ module DictionaryToTerms
                   next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                   puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                   expression_relation.update_attribute(:parent_node_id, name_term.id)
-                  expression.index!
+                  expression.queued_index(priority: Flare::IndexerJob::LOW)
                 end
                 puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                 phrase.child_relations.reload
@@ -149,7 +149,7 @@ module DictionaryToTerms
               if some_phrase_processed
                 puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
                 name_term.child_relations.reload
-                name_term.index!
+                name_term.queued_index(priority: Flare::IndexerJob::LOW)
               end
               puts "#{Time.now}: Finishing sub-process #{Process.pid}."
             rescue Exception => e
@@ -186,7 +186,7 @@ module DictionaryToTerms
                     next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression_relation.update_attribute(:parent_node_id, name_term.id)
-                    expression.index!
+                    expression.queued_index(priority: Flare::IndexerJob::LOW)
                   end
                   puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                   expression_relations.reload
@@ -198,7 +198,7 @@ module DictionaryToTerms
                 if some_phrase_processed
                   puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
                   phrase_relations.reload
-                  name_term.index!
+                  name_term.queued_index(priority: Flare::IndexerJob::LOW)
                 end
               else
                 for phrase_relation in phrase_relations
@@ -206,11 +206,11 @@ module DictionaryToTerms
                   next if phrase.phoneme_term_associations.first.subject_id != Feature::BOD_PHRASE_SUBJECT_ID
                   puts "#{Time.now}: Moving phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                   phrase_relation.update_attribute(:parent_node_id, letter.id)
-                  phrase.index!
+                  phrase.queued_index(priority: Flare::IndexerJob::LOW)
                   phrase.children.each do |expression|
                     next if expression.phoneme_term_associations.first.subject_id != Feature::BOD_EXPRESSION_SUBJECT_ID
                     puts "#{Time.now}: Reindexing expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
-                    expression.index!
+                    expression.queued_index(priority: Flare::IndexerJob::LOW)
                   end
                 end
                 puts "#{Time.now}: Deleting name #{name_term.prioritized_name(v).name} (T#{name_term.fid})."
@@ -228,7 +228,7 @@ module DictionaryToTerms
           Spawnling.wait([sid])
         end
         letter.children.reload
-        letter.index!
+        letter.queued_index(priority: Flare::IndexerJob::LOW)
       end
       Flare.commit
     end
@@ -257,7 +257,7 @@ module DictionaryToTerms
                     expression = expression_relation.child_node
                     puts "#{Time.now}: Moving expression #{expression.prioritized_name(v).name} (T#{expression.fid})."
                     expression_relation.update_attribute(:parent_node_id, name_term.id)
-                    expression.index!
+                    expression.queued_index(priority: Flare::IndexerJob::LOW)
                   end
                   puts "#{Time.now}: Deleting phrase #{phrase.prioritized_name(v).name} (T#{phrase.fid})."
                   phrase.child_relations.reload
@@ -269,7 +269,7 @@ module DictionaryToTerms
               if some_flattened
                 puts "#{Time.now}: Reindexing name #{name_term.prioritized_name(v).name} (T#{name_term.fid})"
                 name_term.child_relations.reload
-                name_term.index!
+                name_term.queued_index(priority: Flare::IndexerJob::LOW)
               end
               puts "#{Time.now}: Finishing sub-process #{Process.pid}."
             rescue Exception => e
