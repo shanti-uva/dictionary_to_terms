@@ -304,7 +304,7 @@ module DictionaryToTerms
                 head = f.clone_with_names
                 FeatureRelation.create!(child_node: head, parent_node: letter, perspective: @tib_alpha, feature_relation_type: relation_type)
                 head.subject_term_associations.create(subject_id: Feature::BOD_PHRASE_SUBJECT_ID, branch_id: Feature::BOD_PHONEME_SUBJECT_ID)
-                head.update_attributes(is_public: true, position: f.position)
+                head.update(is_public: true, position: f.position)
                 puts "#{Time.now}: Created head #{head.prioritized_name(v).name} (#{head.fid}) under letter #{letter.prioritized_name(v).name}..."
               end
               FeatureRelation.create!(child_node: f, parent_node: head, perspective: @tib_alpha, feature_relation_type: relation_type)
