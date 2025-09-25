@@ -378,7 +378,7 @@ module DictionaryToTerms
         sid = Spawnling.new do
           begin
             puts "Spawning sub-process #{Process.pid}."
-            f.update_hierarchy
+            f.queued_update_hierarchy
             f.update_cached_feature_names
             f.update_name_positions
             f.names.first.ensure_one_primary
