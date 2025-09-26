@@ -16,3 +16,7 @@ gemspec
 
 gem 'rails'
 gem 'sass-rails'
+gem 'hpricot', github: 'ycorredius/hpricot'#, '>= 0.8.6'
+
+gem 'flare',                      '1.4.8',        github: 'shanti-uva/flare',                tag: 'v1.4.8' #path: '../engines/flare'
+gem 'kmaps_engine',               '6.9.4',        github: 'shanti-uva/kmaps_engine',         tag: 'v6.9.4' #path: '../engines/kmaps_engine'
